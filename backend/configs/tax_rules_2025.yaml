@@ -1,0 +1,35 @@
+# Версионные правила расчёта налогов — 2025. См. tax_rules_2024.yaml для
+# общей структуры. Изменения 2025: ключевая ставка на 01.01.2025 = 21%
+# (повышение от 26.07.2024).
+
+year: 2025
+method: jan1_rate
+key_rate_jan1: "0.21"
+non_taxable_threshold: "1000000"
+deposit_tax_rate: "0.13"
+
+sources:
+  deposit: "НК РФ ст. 214.2, ФЗ-382 от 26.12.2023"
+  key_rate: "ЦБ РФ: ключевая ставка на 01.01.2025 = 21%"
+  ndfl: "НК РФ Гл. 23"
+
+npd:
+  rate_individuals: "0.04"
+  rate_business: "0.06"
+  annual_limit: "2400000"
+  source: "ФЗ-422 от 27.11.2018"
+
+usn:
+  rate_income: "0.06"
+  rate_income_minus_expenses: "0.15"
+  source: "НК РФ Гл. 26.2"
+
+ndfl:
+  base_rate: "0.13"
+  high_rate: "0.15"
+  high_income_threshold: "5000000"
+  child_deduction_1: "1400"
+  child_deduction_3: "3000"
+  property_deduction_max: "260000"
+  iis_deduction_max: "52000"
+  source: "НК РФ ст. 210, 218, 220, 219.1"

@@ -1,0 +1,28 @@
+# FinHelper — development environment
+# Brings up PostgreSQL only. Backend & frontend run locally for fast iteration.
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finhelper-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finhelper
+      POSTGRES_PASSWORD: finhelper_pass
+      POSTGRES_DB: finhelper
+      # Tune for dev — these settings improve performance on local SSDs
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finhelper -d finhelper"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+    driver: local
