@@ -32,7 +32,7 @@ func closeTo(t *testing.T, got, want decimal.Decimal, msg string) {
 func TestAnnuityPayment_Golden(t *testing.T) {
 	// P=1_000_000, годовая 12%, 24 мес. i = 0.12 / 12 = 0.01.
 	// Exact value A = P × [i(1+i)^n] / [(1+i)^n − 1] = 47073.47222326…
-	// Rounded HALF_EVEN to scale 2 → 47073.47 (NOT 47073.46 as printed in
+	// Rounded to scale 2 → 47073.47 (NOT 47073.46 as printed in
 	// MATH_FORMULAS.md §2.1/§6.3 — that doc value is an arithmetic typo, same
 	// class of error fixed in Этап 0; Excel ПЛТ(0.12/12, 24, -1000000)
 	// returns -47073.472223…, confirming 47073.47 as the correct rounding).

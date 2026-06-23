@@ -17,6 +17,10 @@ import (
 //
 // Use the constructor NewMoney to enforce scale. Never create Money from
 // float64 — that loses precision before we even start.
+//
+// Rounding mode: shopspring/decimal.Round(n) uses ROUND_HALF_AWAY_FROM_ZERO
+// (1.005 → 1.01, −1.005 → −1.01). This differs from ROUND_HALF_EVEN (bankers'
+// rounding); do not assume even-rounding when working with this type.
 type Money struct {
 	v decimal.Decimal
 }
@@ -28,7 +32,7 @@ const MoneyScale = 2
 var Zero = Money{v: decimal.Zero}
 
 // NewMoney creates a Money value from a decimal.Decimal, rounding to
-// MoneyScale using bankers' rounding (HALF_EVEN) — the financial standard.
+// MoneyScale using ROUND_HALF_AWAY_FROM_ZERO (shopspring default).
 func NewMoney(d decimal.Decimal) Money {
 	return Money{v: d.Round(MoneyScale)}
 }
@@ -94,3 +98,30 @@ func (m Money) IsZero() bool { return m.v.IsZero() }
 
 // IsPositive reports whether the amount is greater than zero.
 func (m Money) IsPositive() bool { return m.v.IsPositive() }
+
+// FromDecimal wraps a raw decimal (e.g. scanned from NUMERIC) back into Money,
+// rounding to MoneyScale. Use when reading amounts from the DB.
+func FromDecimal(d decimal.Decimal) Money { return Money{v: d.Round(MoneyScale)} }
+
+// Abs returns the absolute value of m.
+func (m Money) Abs() Money {
+	if m.v.IsNegative() {
+		return Money{v: m.v.Neg()}
+	}
+	return m
+}
+
+// Neg returns the unary negation of m.
+func (m Money) Neg() Money { return Money{v: m.v.Neg()} }
+
+// Equal reports whether two Money values are exactly equal.
+func (m Money) Equal(b Money) bool { return m.v.Equal(b.v) }
+
+// AddAll sums a slice of Money, returning Zero on nil/empty.
+func AddAll(items []Money) Money {
+	out := Zero
+	for _, x := range items {
+		out = out.Add(x)
+	}
+	return out
+}

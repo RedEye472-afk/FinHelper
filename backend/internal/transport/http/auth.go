@@ -10,9 +10,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/user/finhelper/internal/auth"
-	applog "github.com/user/finhelper/internal/log"
-	"github.com/user/finhelper/internal/storage"
+	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	applog "github.com/RedEye472-afk/FinHelper/internal/log"
+	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/internal/storage"
 )
 
 // AuthDeps bundles collaborators an AuthHandler needs.
@@ -128,6 +129,23 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		h.deps.Logger.Error("register: set user_hash", "user_hash", userHash, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal", "")
 		return
+	}
+
+	// Seed default categories + keyword rules for ф.2 (auto-categorization),
+	// inside the same tx so a new user is immediately categorizable. Both
+	// helpers are idempotent (ON CONFLICT DO NOTHING), so a retry after a
+	// partial failure won't double-insert. Seed failures are logged but do
+	// NOT abort registration — a user without categories is degraded but
+	// functional; blocking signup on a seed issue would be worse.
+	if err := h.deps.Pool.SeedSystemCategories(ctx, tx, id, categorization.SystemCategories); err != nil {
+		h.deps.Logger.Error("register: seed categories", "user_hash", userHash, "error", err.Error())
+	}
+	ruleSeeds := make([]storage.KeywordRuleSeed, 0, len(categorization.SystemKeywordRules))
+	for _, r := range categorization.SystemKeywordRules {
+		ruleSeeds = append(ruleSeeds, storage.KeywordRuleSeed{Keyword: r.Keyword, CategoryName: r.Category})
+	}
+	if err := h.deps.Pool.SeedDefaultsForUser(ctx, tx, id, ruleSeeds); err != nil {
+		h.deps.Logger.Error("register: seed rules", "user_hash", userHash, "error", err.Error())
 	}
 
 	if err := tx.Commit(); err != nil {

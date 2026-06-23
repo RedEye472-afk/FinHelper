@@ -17,7 +17,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/user/finhelper/internal/mathcore/credit"
+	"github.com/RedEye472-afk/FinHelper/internal/mathcore/credit"
 )
 
 // cfF64 is the float64 projection of a Cashflow used inside the solver.

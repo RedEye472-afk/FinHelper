@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/user/finhelper/internal/auth"
-	applog "github.com/user/finhelper/internal/log"
+	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	applog "github.com/RedEye472-afk/FinHelper/internal/log"
 )
 
 type ctxKey int

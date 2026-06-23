@@ -6,8 +6,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/user/finhelper/internal/auth"
-	"github.com/user/finhelper/internal/storage"
+	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
+	"github.com/RedEye472-afk/FinHelper/internal/storage"
 )
 
 // Deps bundles everything the v1 API router needs. main() assembles it once
@@ -18,6 +20,15 @@ type Deps struct {
 	Issuer *auth.JWTIssuer
 	Salt   string
 	Logger *slog.Logger
+
+	// Operations is the business service for ф.1 (manual entry). nil = skip
+	// mounting /operations routes (used by smoke/CI boots without a full
+	// service graph; the pool itself is still required).
+	Operations *operations.Service
+	// Categorization is the auto-categorizer for ф.2. nil = skip mounting
+	// /categories + /categorization routes. The operations service is wired
+	// with it separately via SetCategorizer in main().
+	Categorization *categorization.Service
 }
 
 // NewRouter mounts the public and authenticated route groups under /api/v1.
@@ -25,7 +36,8 @@ type Deps struct {
 // Layout:
 //
 //	/api/v1/auth/{register,login,refresh}   public
-//	/api/v1/...                             behind AuthMiddleware (placeholder for Задача 3+)
+//	/api/v1/operations/...                   behind AuthMiddleware (ф.1)
+//	/api/v1/...                              other authenticated routes
 //
 // Returns nil if deps are incomplete — main treats that as a fatal boot error.
 func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
@@ -53,9 +65,17 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 		})
 
 		// Everything else under /api/v1 is authenticated. Concrete feature
-		// handlers (operations, dashboard, …) get mounted here in Задача 3+.
+		// handlers get mounted here as their services come online.
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Wrap)
+
+			if deps.Operations != nil {
+				NewOperationsHandler(deps.Operations, deps.Logger).Register(r)
+			}
+			if deps.Categorization != nil {
+				NewCategoriesHandler(deps.Pool, deps.Categorization, deps.Logger).Register(r)
+			}
+
 			// Example placeholder so the group is non-empty and verified by
 			// integration tests. Returns the authenticated user_id.
 			r.Get("/me", func(w http.ResponseWriter, req *http.Request) {

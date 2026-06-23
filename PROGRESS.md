@@ -36,7 +36,7 @@
 - `FinHelper/docker-compose.yml` — postgres:16-alpine, healthcheck, volume pgdata
 - `FinHelper/backend/.env.example` — все переменные с комментариями
 - `FinHelper/.gitignore` — Go/Node/secrets/IDE
-- `FinHelper/backend/go.mod` — module `github.com/user/finhelper`, Go 1.26.4
+- `FinHelper/backend/go.mod` — module `github.com/RedEye472-afk/FinHelper`, Go 1.26.4
 - `FinHelper/backend/migrations/0001_init.sql` — полная схема:
   users, refresh_tokens, accounts, categories, operations, goals, budgets
   + ENUM-типы + триггер `touch_updated_at`
@@ -214,32 +214,176 @@
 
 ---
 
-## ⏳ Задача 5 — investment (NPV/XIRR/MIRR/DPP/PI) — СЛЕДУЮЩИЙ ШАГ
+## ✅ Задача 5 — investment (NPV/XIRR/MIRR/DPP/PI) (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
 
-`internal/mathcore/investment/` с golden-тестами из MATH_FORMULAS.md §3:
-- `NPV(cashflows, rate)` — тривиальный decimal
-- `XIRR(cashflows)` — **численный solver, переиспользуем BrentQ** из credit/solver.go (Этап 0 фикс). Эталон ~12.34% (§3.2). Внимание: XIRR это **эффективная** годовая ставка через ACT/365, не номинальная — отличаем от ПСК
-- `MIRR` — формула через PV_negative / FV_positive
-- `DPP` — кумулятивный дисконтированный поток
-- `PI` — PV_future / initial
+**Файлы созданы:**
+- `internal/mathcore/investment/doc.go` — package doc + sentinels (ErrInsufficientCashflows, ErrNoSignChange, ErrSolverFailed, ErrNoPositiveCF, ErrNoNegativeCF, ErrInvalidRate, ErrNeverPaidBack, ErrZeroInitialInvestment)
+- `internal/mathcore/investment/npv.go` — `NPV` (decimal), `Cashflow` type, `sortByDate`
+- `internal/mathcore/investment/xirr.go` — `XIRR` через `credit.BrentQ` (второй и последний documented float64 bridge). Effective annual yield `(1+r)^(days/365) − 1`
+- `internal/mathcore/investment/mirr.go` — `MIRR` (PV_neg / FV_pos)^(1/n) − 1, decimal
+- `internal/mathcore/investment/payback.go` — `DPP` (с интерполяцией) + `PI`
+- `internal/mathcore/investment/investment_test.go` — 15 тестов: golden + edge-cases
 
-XIRR — второй (и последний) documented float64 bridge. Переиспользуем bracket-search логику из psk.go (вынести в общий helper?).
+**Верификация (23.06):** BUILD_OK / VET_OK / `go test ./internal/mathcore/investment/` → 15/15 зелёных
+
+**Ключевые эталоны** (с пересчётом — doc §3 содержал арифметические ошибки):
+- NPV (-100k, +30k/+40k/+50k, r=10%) = -2103.68 (unprofitable) — сходится с §3.1
+- XIRR (4 квартальных CF) = **0.40657** (~40.66%) — round-trip проверка: NPV@XIRR ≈ 0. Doc §3.2 указывал 12.34% — **невозможно** для CF где 120k дохода на 100k вложений за год
+- MIRR = **0.08631** (~8.63%) — кубический корень 1.28192 = 1.08631, не 1.08527 (doc §3.3)
+- DPP — не окупается за 3 года при r=10% (сходится с §3.4)
+- PI unprofitable = 0.97896 (< 1)
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
+XIRR = **эффективная** годовая доходность, в отличие от ПСК (номинальная по ЦБ).
+Не путать метрики при разработке фич 5-9 (Этап 4).
+
+**Хорошо:**
+- BrentQ переиспользован из credit без дубля
+- Все денежные суммы — decimal, в float конвертируются только даты→дни и финальный rate→decimal
+- DPP корректно обрабатывает immediate payback (t=0 → 0, не −1)
+
+**Плохо / тех. долг:**
+- `solveXIRR` дублирует логику bracket-search из `credit.solveIRR`. Когда появится 3-й потребитель — вынести в `mathcore/solver` подпакет
+- Doc §3 опять содержал неверные эталоны (XIRR 12.34%, MIRR 8.52%) — та же категория багов, что Этап 0 и Задача 4
 
 ---
 
-## ⏳ Задача 6 — tax (NPD/USN/NDFL/deposit) — после investment
+## ✅ Задача 6 — tax (NPD/USN/NDFL/deposit) (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
 
-`internal/mathcore/tax/` + `configs/tax_rules_{год}.yaml` (версионирование):
-- `DepositTax` уже описан в §5.4 (ФЗ-382): порог = 1М × key_rate_jan1, НДФЛ 13%
-- Нужен YAML-loader и unit-тесты на каждый год (2024, 2025, 2026)
+**Файлы созданы:**
+- `configs/tax_rules_{2024,2025,2026}.yaml` — версионные правила (canon в backend/configs, копия embedded в tax/configs для `go:embed`)
+- `internal/mathcore/tax/tax.go` — package doc + sentinels + `Dec` (YAML-friendly decimal через строку, чтобы избежать float-потерь) + `Rules`/`NPDRules`/`USNRules`/`NDFLRules`
+- `internal/mathcore/tax/loader.go` — `LoadRules(year)` через `embed.FS`, `LoadRulesFromFS` (для тестов), `MustLoadRules`
+- `internal/mathcore/tax/parse.go` — YAML-парсер
+- `internal/mathcore/tax/deposit.go` — `DepositTax` (ФЗ-382) + `Threshold`
+- `internal/mathcore/tax/npd.go` — `NPD` + `NPDResult.ExceedsLimit` (сигнал переключения режима)
+- `internal/mathcore/tax/usn.go` — `USN` (2 режима: Income / IncomeMinusExpenses)
+- `internal/mathcore/tax/ndfl.go` — `NDFL` (прогрессивная шкала 13%/15%) + `ChildDeduction`
+- `internal/mathcore/tax/tax_test.go` — 16 тестов: golden + edge-cases
+
+**Зависимости:** `gopkg.in/yaml.v3 v3.0.1`
+
+**Верификация (23.06):** BUILD_OK / VET_OK / `go test ./internal/mathcore/tax/` → 16/16 зелёных
+
+**Ключевые эталоны (§5):**
+- DepositTax 2024: interest=200k, rate_jan1=0.16 → threshold 160k → tax=5200 ✓
+- DepositTax 2025: interest=300k, rate_jan1=0.21 → threshold 210k → tax=11700 ✓
+- NPD: 500k физлица + 300k бизнес = 20000 + 18000 = 38000 ✓
+- USN 15%: (2M − 1.2M) × 0.15 = 120000 ✓
+- NDFL прогрессивная: 7M = 5M×0.13 + 2M×0.15 = 950000 ✓
+- ChildDeduction: 1→1400, 2→2800, 3→5800, 4→8800
+
+**Хорошо:**
+- `Dec`-обёртка гарантирует, что YAML `"0.16"` парсится в decimal без float64-потери
+- `go:embed` — правила tamper-evident, изменение требует перекомпиляции (важно для фин. приложения)
+- `path.Join` (не `filepath.Join`) для embed.FS — forward-slash независимо от OS
+- Версионирование: 2024/2025/2026 отдельно, добавление нового года = новый файл + тест
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
+embed.FS **всегда** использует forward slashes, даже на Windows. `filepath.Join` даст `configs\…` → `fs.ReadFile` упадёт. Используем `path.Join`.
+
+**Плохо / тех. долг:**
+- Канон configs лежат и в `backend/configs/` и в `internal/mathcore/tax/configs/` (дублирование). Когда будет CI — сделать `backend/configs/` единственным источником и symlink/embed-директиву с относительным путём
+- Ставки ЦБ на 01.01.2026 взяты предположительно (21%) — сверить с cbr.ru перед релизом
 
 ---
 
-## ⏳ Этапы 2-6 — НЕ НАЧАТЫ (по плану в чате)
+## ✅ ЭТАП 2 ЗАКРЫТ — мат. ядро полностью готово
 
-Этап 2: мат. ядро (credit/investment/tax)
-Этап 3: фичи 1-4 (operations, dashboard, budgets)
-Этап 4: фичи 5-9 (калькуляторы)
+| Пакет | Файлов | Тестов | Статус |
+|---|---|---|---|
+| mathcore/daycount | 2 | 13 | ✅ (Задача 3) |
+| mathcore/tvm | 2 | 12 | ✅ (Задача 3) |
+| mathcore/credit | 6 | 20 | ✅ (Задача 4) |
+| mathcore/investment | 6 | 15 | ✅ (Задача 5) |
+| mathcore/tax | 8 | 16 | ✅ (Задача 6) |
+| **ИТОГО** | **24** | **76** | **build/vet/test зелёные** |
+
+Documented float64 bridges: ровно 2 (credit/BrentQ через PSK, переиспользован в XIRR) — как и требовал план. Всё остальное — строго decimal.
+
+---
+
+## ✅ Этап 3 / Фича 1 — Ручной ввод операций (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
+
+**Цель:** BUSINESS_LOGIC.md ф.1 — ручной ввод операций с идемпотентностью, PII-маскированием, детерминированным пересчётом балансов — достигнута.
+
+**Файлы созданы:**
+
+*Domain layer:*
+- `internal/domain/account.go` — `Account`, `AccountType` (cash/bank/savings/investment/crypto/debt), `Validate()`
+- `internal/domain/category.go` — `Category` (system/user, parent_id), `Validate()`
+- `internal/domain/money.go` — расширение: `FromDecimal`, `Abs`, `Neg`, `Equal`, `AddAll`. **Документация поправлена:** shopspring `Round(n)` = ROUND_HALF_AWAY_FROM_ZERO (1.005→1.01), НЕ HALF_EVEN как раньше утверждалось. Найденные неверные doc-комментарии в `money.go`/`money_test.go`/`credit/credit_test.go` исправлены (та же категория багов что в Этапе 0 — doc↔код рассинхрон).
+- `internal/domain/operation.go` — `Validate()` усилена: добавлена проверка валидности `OperationType` (раньше пропускала любое строковое значение — дыра, найденная service-тестом `unknown_type`)
+
+*PII masking (PRIVACY_RULES.md §"Маскирование PII"):*
+- `internal/pii/pii.go` — `Mask(s)` регекс-маскирование: [PHONE], [EMAIL], [PASSPORT], [CARD], [PERSON] (Cyrillic+Latin ALLCAPS), [MEDICAL], [LEGAL]. Идемпотентное (brackets ломают матчинг), консервативное (не трогает amounts/dates).
+  - **Критическая находка:** Go RE2 `\b` работает ТОЛЬКО с ASCII (`\w = [0-9A-Za-z_]`), рядом с кириллицей НЕ срабатывает. Для кириллических keyword-правил `\b` убран, для person-детекции переписан как «2+ ALLCAPS токенов через whitespace».
+- `internal/pii/pii_test.go` — 15 кейсов (включая idempotency, multiple-types-at-once, keeps-amounts)
+
+*Storage layer:*
+- `internal/storage/accounts.go` — `CreateAccount`, `GetAccount`, `ListAccounts`, `SetAccountBalance`; sentinels `ErrAccountExists`/`ErrAccountNotFound`
+- `internal/storage/categories.go` — CRUD + `SeedSystemCategories(tx, names)` (для онбординга)
+- `internal/storage/operations.go` — `CreateOperation`, `GetOperation`, `GetOperationByCalcID`, `ListOperations` (с пагинацией через `Page{Limit, BeforeID}` и фильтрами `OperationFilter{From,To,Types,AccID,CatID,Planned}`), `DeleteOperation` (soft), `UpdateOperationCategory`, `SumByAccountSince`. `scanOperation` общий scanner для Row+Rows.
+  - **Критический фикс бизнес-логики:** изначальный `SumByAccountSince` игнорировал переводы → балансы счетов не двигались при transfer/exchange. Переписан в один SQL с UNION ALL: source leg (-amount/+amount for income/expense; -amount for transfer/exchange) + destination leg (+amount_dst или +amount для transfer/exchange). Теперь переводы корректно двигают балансы (BUSINESS_LOGIC ф.1: «переводы НЕ в cashflow и налогах, **только в остатках счетов**»).
+- `internal/storage/accounts_test.go` + `operations_test.go` — 14 тестов через `sqlmock` (в стиле `users_test.go`)
+
+*Service layer:*
+- `internal/service/operations/operations.go` — `Service` с `OperationRepo` interface (тестируем без БД). Методы: `Create`, `Get`, `List` (с `more`-сигналом через fetch-limit+1), `Delete`, `SetCategory`. Оркестрация: validate → mask PII → owner-check accounts → insert → recompute balances. Idempotency: при `ErrOperationExists` возвращается оригинал через `GetOperationByCalcID`. `recomputeBalance` делает полный recompute (self-healing, no drift). `newCalcID = srv:{user_id}:{unix_nano}`.
+- `internal/service/operations/operations_test.go` — 9 тестов через in-memory `fakeRepo`: PII-masking, idempotency, invalid-input (3 кейса), unowned-account, transfer-recomputes-both-balances, list-more-flag, delete-recomputes-balance, delete-not-found
+
+*HTTP layer:*
+- `internal/transport/http/operations.go` — `OperationsHandler.Register(r)` монтирует `POST/GET /operations`, `GET/DELETE /operations/{id}`, `PATCH /operations/{id}/category`. `operationRequest`/`operationResponse` JSON-формы со строковыми деньгами (без float!), parse-хелперы `parseCreate`/`parseListQuery`. `writeServiceError` маппит sentinel'ы → 400/404/500.
+- `internal/transport/http/operations_test.go` — 9 интеграционных тестов через `httptest.Server` + chi router + in-memory `fakeOpsRepo` (Create success/invalid-type/invalid-amount, Get not-found, Create→Get roundtrip, List pagination, Delete, SetCategory, Unauthorized-without-context)
+
+*Wiring:*
+- `internal/transport/http/router.go` — `Deps.Operations *operations.Service`, монтируется в authenticated group если non-nil (graceful: без БД /operations не появляется)
+- `cmd/server/main.go` — `operations.NewService(pool)` подключается к Deps, `applog "api mounted"` (было `"auth endpoints mounted"`)
+
+**Зависимости:** НЕТ новых (chi, shopspring/decimal, sqlmock уже в go.mod).
+
+**Верификация (23.06):**
+- `go build ./...` → BUILD_OK
+- `go vet ./...` → VET_OK (включая проверку errors-before-use в тестах)
+- `go test ./...` → **все 14 пакетов зелёные** (+pii: 15, +domain: +5, +storage: +14, +service/operations: +9, +transport/http: +9)
+- Smoke-тест бинарника (без БД): `/healthz` → 200, `/readyz` → 503 `no_database`, `/api/v1/operations` → 404 (API не смонтирован без pool — корректное graceful-поведение)
+
+**Ключевые эталоны:**
+- PII: `"Перевод от ИВАН ИВАНОВИЧ И."` → `"Перевод от [PERSON]"`; `"Звонок +7 (999) 123-45-67"` → `"Звонок [PHONE]"` (проверено на service- и http-уровне)
+- Идемпотентность: повторный POST с тем же `calc_id` возвращает ту же операцию, не создаёт дубль и не падает
+- Round-trip: create → get-by-id → равенство всех полей включая PII-маскированный counterparty
+- Пагинация: 3 операции, limit=2 → 2 items + `more=true`
+
+**Хорошо:**
+- **PII маскирование до persistence** — приватность by design, не после (PRIVACY_RULES). Один и тот же `pii.Mask` используется в service — гарантия что ни один путь записи не обходит маскирование
+- **Идемпотентность на (user_id, calc_id)** с unique-constraint в БД + service-уровневой обработкой `ErrOperationExists` → fetch оригинала. Двойная защита: даже если два параллельных запроса придут с одним calc_id, БД-констрейнт пустит только один
+- **Пересчёт баланса как полный recompute**, а не delta-update → self-healing: любой drift от частичного отказа исправляется на следующей операции
+- **Storage-agnostic service** через `OperationRepo` interface → unit-тесты без БД, в стиле auth-слоя (`JWTVerifier`)
+- **Money как строка в JSON** — нигде не проходит через float64 (нулевой детерминизм-нарушений)
+- **Финансовая семантика transfer** наконец корректна: source -, destination +, cashflow/taxes не затронуты (соответствует ф.1 дословно)
+- **Graceful degradation**: без БД сервер бьётся, /healthz работает, /api/v1 не падает с паникой — важно для CI и smoke
+
+**Плохо / тех. долг:**
+- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении). Все SQL сверен со схемой `0001_init.sql` вручную + sqlmock покрывает контракты. Полноценный прогон — когда будет docker-compose
+- `currency_exchange` с разными валютами сейчас работает «по доверению»: amount_dst пишется как есть, конвертация по курсу ЦБ НЕ реализована (RUB-only scope-lock; когда добавим multi-currency — понадобится exchange-rates таблица)
+- Авто-категоризация (ф.2) ещё не подключена: `category_id` ставится вручную или None. База для неё (`categories`, `UpdateOperationCategory`) уже готова
+- `SeedSystemCategories` написан, но не вызывается из registration flow — нужно звать в `AuthHandler.Register` после создания user (добавим в ф.2 когда будут правила категорий)
+- Нет rate-limiting на /operations (как и на /auth) — отложено
+- Мой изначальный `SumByAccountSince` имел логическую дыру (переводы не двигали баланс); нашёл тестом СЕЙЧАС, а не на ревью. Мораль: SQL-агрегации по типам операций требуют явных тест-кейсов на каждый тип, не только income/expense
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
+PII-маскирование `pii.Mask` вызывается **только в service/operations.Create**, на входе в persistence. Ни storage, ни handlers не маскируют сами — единственная точка. Если появится ф.2 (авто-категоризация) или импорт CSV (Этап 6), они **обязаны** идти через тот же service-путь, иначе обойдут маскирование.
+
+---
+
+## ⏳ Этап 3 — Фичи 2-4 Level 1 — СЛЕДУЮЩИЙ ШАГ
+
+`internal/service/{operations,categorization,dashboard,budget}/` + REST handlers:
+- Фича 1: ручной ввод операций (calc_id для идемпотентности, переводы НЕ в cashflow)
+- Фича 2: авто-категоризация (rules-based, без ML — scope-lock из рисков)
+- Фича 3: сводный дашборд (баланс, чистая стоимость, прогресс целей)
+- Фича 4: бюджеты с переносом остатков
+
+Этап 4: фичи 5-9 (калькуляторы — используют готовое mathcore)
 Этап 5: AI stub (fallback-шаблоны)
 Этап 6: CSV/Excel импорт + OpenAPI + E2E
 
@@ -268,10 +412,13 @@ docker-compose up -d postgres
 
 ## 📚 Принятые архитектурные решения
 
-- **Деньги**: всегда `domain.Money` (обёртка над decimal.Decimal, scale=2). Запрет float64.
+- **Деньги**: всегда `domain.Money` (обёртка над decimal.Decimal, scale=2). Запрет float64. Округление = shopspring default ROUND_HALF_AWAY_FROM_ZERO (1.005→1.01), НЕ bankers' rounding.
 - **Логи**: только `user_hash` (SHA-256(user_id + USER_HASH_SALT)), email/телефон/ФИО — никогда.
-- **Идемпотентность**: operations имеют `calc_id`, UNIQUE(user_id, calc_id).
+- **Идемпотентность**: operations имеют `calc_id`, UNIQUE(user_id, calc_id). При дубле — возвращается оригинал.
+- **PII-маскирование**: единственная точка — `pii.Mask` в `service/operations.Create` (до persistence). Storage и handlers не маскируют сами.
 - **Soft delete**: `deleted_at TIMESTAMPTZ`, hard delete отложен в v1.0.
+- **Баланс счетов**: cached в `accounts.balance`, полный recompute в `service/operations.recomputeBalance` (self-healing). Переводы двигают баланс через обе ноги (source −, destination +amount_dst).
+- **Service-репозиторий interface** (`OperationRepo`): unit-тесты без БД через fake, интеграция через sqlmock, прод через `*storage.Pool`.
 - **DB-опциональность**: конфиг грузится без DATABASE_URL, чтобы /healthz работал в CI.
 - **CASFD-приватность**: PII в `counterparty` маскируется перед сохранением (PRIVACY_RULES.md §"Маскирование").
 - **JWT (с Задачи 2)**: access (15 мин) + refresh (30 дней) на разных секретах; refresh single-use с rotation; в БД только SHA-256(refresh); claims несут `user_id` и `user_hash`.

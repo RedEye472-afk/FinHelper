@@ -44,3 +44,6 @@ frontend/build/
 # ===== DB / docker =====
 pgdata/
 postgres-data/
+
+# ===== Misc =====
+nul

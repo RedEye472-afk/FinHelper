@@ -99,6 +99,11 @@ func (o Operation) Validate() error {
 	if !o.Amount.IsPositive() {
 		return errors.New("operation: amount must be positive")
 	}
+	switch o.Type {
+	case OpIncome, OpExpense, OpTransfer, OpCurrencyExchange, OpRefund:
+	default:
+		return errors.New("operation: invalid operation_type")
+	}
 	if o.Type == OpTransfer || o.Type == OpCurrencyExchange {
 		if o.AccountDstID == nil || *o.AccountDstID == 0 {
 			return errors.New("operation: transfer/exchange requires destination account")

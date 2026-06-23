@@ -18,11 +18,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/user/finhelper/internal/auth"
-	"github.com/user/finhelper/internal/config"
-	applog "github.com/user/finhelper/internal/log"
-	"github.com/user/finhelper/internal/storage"
-	transporthttp "github.com/user/finhelper/internal/transport/http"
+	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	"github.com/RedEye472-afk/FinHelper/internal/config"
+	applog "github.com/RedEye472-afk/FinHelper/internal/log"
+	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
+	"github.com/RedEye472-afk/FinHelper/internal/storage"
+	transporthttp "github.com/RedEye472-afk/FinHelper/internal/transport/http"
 )
 
 func main() {
@@ -85,7 +87,7 @@ func run() error {
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
 
-	// ----- JWT issuer + v1 API router (auth endpoints) -----
+	// ----- JWT issuer + v1 API router (auth + operations endpoints) -----
 	// Auth requires a DB pool. If we booted without one (smoke/CI), skip
 	// mounting /api/v1 rather than crashing — /healthz still works.
 	if pool != nil {
@@ -97,17 +99,24 @@ func run() error {
 			return fmt.Errorf("jwt issuer: %w", err)
 		}
 		authMW := transporthttp.NewAuthMiddleware(issuer, logger)
+		operationsSvc := operations.NewService(pool)
+		// Categorizer shares the pool; attaching it to the operations service
+		// turns on auto-categorization on create (BUSINESS_LOGIC ф.2).
+		categorizationSvc := categorization.NewService(pool)
+		operationsSvc.SetCategorizer(categorizationSvc)
 		r.Mount("/", transporthttp.NewRouter(transporthttp.Deps{
-			Pool:   pool,
-			Issuer: issuer,
-			Salt:   cfg.UserHashSalt,
-			Logger: logger,
+			Pool:           pool,
+			Issuer:         issuer,
+			Salt:           cfg.UserHashSalt,
+			Logger:         logger,
+			Operations:     operationsSvc,
+			Categorization: categorizationSvc,
 		}, authMW))
-		applog.Info(ctx, logger, "auth endpoints mounted",
+		applog.Info(ctx, logger, "api mounted",
 			"access_ttl", cfg.JWT.AccessTTL.String(),
 			"refresh_ttl", cfg.JWT.RefreshTTL.String())
 	} else {
-		applog.Warn(ctx, logger, "no database: /api/v1 auth endpoints not mounted")
+		applog.Warn(ctx, logger, "no database: /api/v1 endpoints not mounted")
 	}
 
 	srv := &http.Server{

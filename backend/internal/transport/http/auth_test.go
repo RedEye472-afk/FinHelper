@@ -15,8 +15,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/user/finhelper/internal/auth"
-	"github.com/user/finhelper/internal/storage"
+	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	"github.com/RedEye472-afk/FinHelper/internal/storage"
 )
 
 // authTestEnv wires a real AuthHandler + AuthMiddleware against a sqlmock DB,

@@ -7,11 +7,18 @@ import (
 )
 
 func TestNewMoney_RoundsToScale(t *testing.T) {
-	// 1.005 must round to 1.00 under HALF_EVEN (bankers' rounding at scale 2).
+	// decimal.NewFromFloat(1.005) is actually ~1.00499999... due to float64
+	// representation loss, so it rounds down to 1.00. (This is also the
+	// reason we forbid constructing Money from float64 in production paths.)
+	// The string path is the precise one — covered in TestParseMoney_Formats.
 	d := decimal.NewFromFloat(1.005)
 	m := NewMoney(d)
 	if got := m.String(); got != "1.00" && got != "1.01" {
 		t.Errorf("unexpected rounding: %s", got)
+	}
+	// String-based rounding: ROUND_HALF_AWAY_FROM_ZERO per shopspring docs.
+	if got := NewMoney(MustParseMoney("1.005").Decimal()).String(); got != "1.01" {
+		t.Errorf("1.005 from string should round to 1.01 (half away from zero), got %s", got)
 	}
 }
 
