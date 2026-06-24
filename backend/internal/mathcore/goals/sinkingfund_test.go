@@ -115,3 +115,42 @@ func TestSolveContribution_AlreadyReached_Zero(t *testing.T) {
 		t.Errorf("contribution must not be negative when target reached, got %s", got)
 	}
 }
+
+func TestSolveTerm_BasicCase(t *testing.T) {
+	// P=0, S=1000000, A=50000, i=0.01 → ln(1.2)/ln(1.01) = 0.18232/0.00995 ≈ 18.32 мес
+	got, err := SolveTerm(decimal.Zero, decimal.NewFromInt(1000000), decimal.NewFromInt(50000), decimal.NewFromFloat(0.01))
+	if err != nil {
+		t.Fatalf("SolveTerm: %v", err)
+	}
+	// Эталон ≈18.32 (между 18 и 19)
+	if got.LessThan(decimal.NewFromInt(18)) || got.GreaterThan(decimal.NewFromInt(19)) {
+		t.Errorf("SolveTerm = %s, want between 18 and 19", got)
+	}
+}
+
+func TestSolveTerm_Unreachable_ContributionTooSmall(t *testing.T) {
+	// P=1000000, i=0.50 (50%/мес), A=1 → A < P·i (1 < 500000) → цель убегает
+	_, err := SolveTerm(decimal.NewFromInt(1000000), decimal.NewFromInt(2000000), decimal.NewFromInt(1), decimal.NewFromFloat(0.50))
+	if err != ErrUnreachable {
+		t.Errorf("expected ErrUnreachable, got %v", err)
+	}
+}
+
+func TestSolveTerm_ZeroRate_Error(t *testing.T) {
+	// i=0 → ln(1)=0, деление на 0 → ErrInvalidRate
+	_, err := SolveTerm(decimal.Zero, decimal.NewFromInt(1000000), decimal.NewFromInt(50000), decimal.Zero)
+	if err != ErrInvalidRate {
+		t.Errorf("expected ErrInvalidRate for i=0, got %v", err)
+	}
+}
+
+func TestSolveTerm_AlreadyReached_Zero(t *testing.T) {
+	// P >= S → уже накопили, n=0
+	got, err := SolveTerm(decimal.NewFromInt(1000000), decimal.NewFromInt(500000), decimal.NewFromInt(100), decimal.NewFromFloat(0.01))
+	if err != nil {
+		t.Fatalf("SolveTerm: %v", err)
+	}
+	if !got.IsZero() {
+		t.Errorf("expected n=0 when P>=S, got %s", got)
+	}
+}

@@ -60,3 +60,47 @@ func SolveContribution(P, S, i decimal.Decimal, n int) (decimal.Decimal, error) 
 	need := S.Sub(grown)
 	return need.Mul(i).Div(factor.Sub(one)), nil
 }
+
+// SolveTerm computes the number of periods needed to reach target S with
+// present capital P, periodic contribution A, and per-period rate i:
+//
+//	n = ln((S·i + A) / (A + P·i)) / ln(1+i)
+//
+// Returns a decimal (caller rounds up to whole periods).
+// Source: Копнова Г.П. Гл. 3.3.3 (inverse of SolveFutureValue for n).
+//
+// Edge cases:
+//   - i <= 0  → ErrInvalidRate (Ln requires 1+i > 0 AND != 1)
+//   - P >= S  → returns 0 (already reached)
+//   - A <= P·i → ErrUnreachable (contribution doesn't outpace interest growth
+//     of present capital; the target recedes instead of approaching)
+func SolveTerm(P, S, A, i decimal.Decimal) (decimal.Decimal, error) {
+	if !i.IsPositive() {
+		return decimal.Zero, ErrInvalidRate
+	}
+	if P.GreaterThanOrEqual(S) {
+		return decimal.Zero, nil
+	}
+	// Unreachable: вклады A не превышают рост P·i → S убегает.
+	if A.LessThanOrEqual(P.Mul(i)) {
+		return decimal.Zero, ErrUnreachable
+	}
+	one := decimal.NewFromInt(1)
+	num := S.Mul(i).Add(A)   // S·i + A
+	denom := A.Add(P.Mul(i)) // A + P·i
+	ratio := num.Div(denom)  // должно быть > 1 (проверено выше)
+	// ratio = (1+i)^n → n = ln(ratio)/ln(1+i)
+	// shopspring/decimal v1.4.0: Ln(precision int32) → (Decimal, error)
+	// (в отличие от Pow, который возвращает Decimal без error). Precision 16
+	// = decimal.DivisionPrecision по умолчанию.
+	const lnPrecision = 16
+	lnRatio, err := ratio.Ln(lnPrecision)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	lnBase, err := one.Add(i).Ln(lnPrecision)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return lnRatio.Div(lnBase), nil
+}
