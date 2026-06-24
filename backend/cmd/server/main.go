@@ -21,7 +21,9 @@ import (
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
 	"github.com/RedEye472-afk/FinHelper/internal/config"
 	applog "github.com/RedEye472-afk/FinHelper/internal/log"
+	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/internal/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
 	"github.com/RedEye472-afk/FinHelper/internal/storage"
 	transporthttp "github.com/RedEye472-afk/FinHelper/internal/transport/http"
@@ -104,6 +106,11 @@ func run() error {
 		// turns on auto-categorization on create (BUSINESS_LOGIC ф.2).
 		categorizationSvc := categorization.NewService(pool)
 		operationsSvc.SetCategorizer(categorizationSvc)
+		// Dashboard service (BUSINESS_LOGIC ф.3) — pure orchestration over the
+		// pool's aggregate queries.
+		dashboardSvc := dashboard.NewService(pool)
+		// Budget service (BUSINESS_LOGIC ф.4) — per-category limits + rollover.
+		budgetSvc := budget.NewService(pool)
 		r.Mount("/", transporthttp.NewRouter(transporthttp.Deps{
 			Pool:           pool,
 			Issuer:         issuer,
@@ -111,6 +118,8 @@ func run() error {
 			Logger:         logger,
 			Operations:     operationsSvc,
 			Categorization: categorizationSvc,
+			Dashboard:      dashboardSvc,
+			Budget:         budgetSvc,
 		}, authMW))
 		applog.Info(ctx, logger, "api mounted",
 			"access_ttl", cfg.JWT.AccessTTL.String(),

@@ -375,15 +375,138 @@ PII-маскирование `pii.Mask` вызывается **только в s
 
 ---
 
-## ⏳ Этап 3 — Фичи 2-4 Level 1 — СЛЕДУЮЩИЙ ШАГ
+## ✅ Этап 3 / Фича 2 — Авто-категоризация (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
 
-`internal/service/{operations,categorization,dashboard,budget}/` + REST handlers:
-- Фича 1: ручной ввод операций (calc_id для идемпотентности, переводы НЕ в cashflow)
-- Фича 2: авто-категоризация (rules-based, без ML — scope-lock из рисков)
-- Фича 3: сводный дашборд (баланс, чистая стоимость, прогресс целей)
-- Фича 4: бюджеты с переносом остатков
+**Цель:** BUSINESS_LOGIC.md ф.2 — rules-based авто-категоризация (scope-lock: БЕЗ ML, БЕЗ банков/MCC) — достигнута.
 
-Этап 4: фичи 5-9 (калькуляторы — используют готовое mathcore)
+**Файлы созданы:**
+- `migrations/0002_categorization.sql` — `categorization_rules` (keyword→category, system/user, priority, soft-delete) + `counterparty_overrides` (exact counterparty→category с confirmation-счётчиком, UNIQUE user+counterparty)
+- `internal/domain/categorization.go` — `RuleSource`, `RolloverPolicy` (none/unlimited/months_3), `LearnThreshold=3`, `MinCategorizationConfidence=0.70`, `NormalizeCounterparty` (lower+trim)
+- `internal/storage/categorization.go` — CRUD rules + overrides; `UpsertOverrideConfirmation` (atomic INSERT…ON CONFLICT DO UPDATE +1); `SeedDefaultsForUser` (resolve имён категорий→id + seed keyword rules в tx регистрации)
+- `internal/storage/scanners.go` — `decimalScanner` (sql.Scanner для NUMERIC→decimal, БЕЗ float64)
+- `internal/service/categorization/defaults.go` — `SystemCategories` (17 категорий RU-ландшафта) + `SystemKeywordRules` (~80 keyword→category: Магнит/Пятёрочка/Ozon/KFC/Яндекс.Такси/МТС/ЖКХ/…); confidence-константы (Keyword 0.75 / Learned 0.95 / Tentative 0.50); `MatchTier`
+- `internal/service/categorization/categorization.go` — `Categorize` (precedence: learned override → user keyword → system keyword → tentative override → no-match), `CategorizeForCreate` (adapter для operations.Categorizer), `Confirm` (Learn path)
+- `internal/transport/http/categorization.go` — `/categories` (list/create), `/categorization/rules` (list/create/delete), `/categorization/confirm`
+
+**Интеграция:**
+- `operations.Service.SetCategorizer` — optional-зависимость; в `Create` если category_id не задан и categorizer подключён → авто-категоризация. Categorizer-failure НЕ блокирует запись (важнее сохранить операцию, чем категорию)
+- `Auth.Register` — внутри tx регистрации seed-ит системные категории + keyword rules (через `SeedSystemCategories` + `SeedDefaultsForUser`). Seed-failure логируется, но НЕ блокирует регистрацию
+- main.go wiring: `categorization.NewService(pool)` + `operationsSvc.SetCategorizer(categorizationSvc)`
+
+**Верификация (24.06):** BUILD_OK / VET_OK / `go test ./...` → все пакеты зелёные
+- service/categorization: 11 тестов (precedence learned/user/system, keyword в description, no-match, нормализация, Confirm валидация, defaults sanity — каждый keyword ссылается на существующую категорию)
+- storage: 8 тестов через sqlmock (CreateRule с user-priority, duplicate, ListRules, DeleteRule, GetOverride, Upsert, SetOverrideCategory reset)
+- transport/http: 9 тестов через sqlmock+httptest (List/Create categories, List/Create/Delete rules, Confirm, unauthorized, нормализация keyword)
+
+**Хорошо:**
+- **Scope-lock соблюдён жёстко**: MCC-коды отсутствуют намеренно (MVP без банков), ML заменён детерминированным счётчиком подтверждений (LearnThreshold=3) — «3 исправления = правило» через pure counter, без training data
+- **Precedence encoded в priority**: user rules (100) > system (0), ListRules возвращает DESC → один проход по правилам даёт корректный приоритет
+- **Confidence-константы консистентны с floor**: keyword/learned выше 0.70 (apply), tentative ниже (ask UI). Проверяется тестом `TestConfidenceForTier_ConsistentWithFloor`
+- **Нормализация counterparty** применяется и при записи (override), и при поиске → always consistent
+- **Categorizer-failure tolerant**: ошибка категоризатора логируется, операция сохраняется с nil category — деньги важнее категории
+
+**Плохо / тех. долг:**
+- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении)
+- Counterparty-override хранит уже PII-маскированное значение; если изменится логика маскирования — override-ы станут невалидны (нужен re-migration)
+- `RolloverUnlimited` lookback захардкожен в 24 месяца (bounded cost)
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
+Авто-категоризация — **единственная точка** в ф.2, где создаётся category assignment. Все пути (create, confirm, manual override) идут через `service/categorization`. Если появится импорт CSV (Этап 6), он ОБЯЗАН вызывать тот же service.
+
+---
+
+## ✅ Этап 3 / Фича 3 — Сводный дашборд (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
+
+**Цель:** BUSINESS_LOGIC.md ф.3 — сводный дашборд «Финансовое здоровье» — достигнута.
+
+**Файлы созданы:**
+- `internal/storage/dashboard.go` — 4 агрегатных запроса:
+  - `CashflowForPeriod` (income/expense/net; transfers/exchanges/refunds исключены через `operation_type IN ('income','expense')`; planned исключены)
+  - `ExpensesByCategory` (LEFT JOIN categories, uncategorised → «Без категории» id=0, DESC по total)
+  - `NetWorth` (assets = Σ positive non-debt balances; debts = Σ |balance| debt accounts; net = assets−debts)
+  - `GoalProgresses` (progress = current/target, CASE-защита от деления на 0)
+  - `applyPeriodBounds` helper (динамический WHERE с prefix для алиаса таблицы)
+- `internal/service/dashboard/dashboard.go` — `Compute` (оркестрация 4 запросов + period-resolution), `Period` (month/quarter/year), `CustomRange`, nil-slice normalization ([] не null в JSON)
+- `internal/transport/http/dashboard.go` — `GET /dashboard?period=|from=&to=`, money как строки в JSON
+
+**Верификация (24.06):** BUILD_OK / VET_OK / зелёные
+- service/dashboard: 10 тестов (resolveBounds month/quarter/year/custom/reversed/partial, Compute assembly, nil-slice normalization, storage-error propagation)
+- storage: 6 тестов (cashflow success/no-rows, by-category с uncategorised bucket, net_worth, goal progresses + zero-target no-division)
+- transport/http: 4 теста (Get success проверка всех секций, unauthorized, bad from-date, custom range)
+
+**Хорошо:**
+- **Период-резолвция в service, SQL agnostic**: month/quarter/year → calendar bounds; custom range overrides; валидация partial/reversed. SQL-слой не знает про календарь
+- **Transfers/exchanges/refunds исключены из cashflow** на уровне SQL (соответствует ф.1/ф.3: «Переводы исключены»)
+- **NetWorth корректен для debt accounts**: debt-счета с ABS(balance) в долги, остальные в активы; overdraft уменьшает активы
+- **nil→empty slice** для стабильного JSON — фронт не падает на пустых периодах
+- **GoalProgress zero-safe**: target=0 → progress=0 (CASE в SQL), проверено тестом
+
+**Плохо / тех. долг:**
+- E2E через реальный Postgres отложен
+- NetWorth считает overdraft на non-debt счетах как уменьшение активов, но НЕ как увеличение долгов — для RU-реалий приемлемо
+
+---
+
+## ✅ Этап 3 / Фича 4 — Бюджеты с rollover (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
+
+**Цель:** BUSINESS_LOGIC.md ф.4 — лимиты по категориям с переносом остатков и прогнозом перерасхода — достигнута.
+
+**Файлы созданы:**
+- `internal/storage/budgets.go` — CRUD budgets (Create/Get/List/Update/Delete) + `SpendForCategory` (Σ expense по category за период, planned исключены)
+- `internal/service/budget/budget.go` — главная логика:
+  - **Rollover**: none (no carry) / unlimited (24-mo bounded lookback) / months_3 (last 3). Overspent months contribute 0 (не идём «в минус»)
+  - **Прогноз перерасхода**: `projectSpend` экстраполирует daily rate (spent/daysElapsed × daysIn); на последнем дне = spent
+  - **Status**: `ok` / `at_risk` (projected > effective) / `over` (remaining < 0) / `inactive`
+  - `periodDayCounts` clamped [1, daysIn]; `classify` чистая функция над (remaining, projected, effective)
+- `internal/transport/http/budgets.go` — `GET/POST /budgets`, `GET/PATCH/DELETE /budgets/{id}`, `GET /budgets/{id}/status`
+
+**Верификация (24.06):** BUILD_OK / VET_OK / зелёные
+- service/budget: 18 тестов (Create validation/default-rollover/duplicate, rollover none/months_3/unlimited/overspent-contributes-0, status ok/over/at_risk/inactive/not-found, projectSpend mid-month/last-day, periodDayCounts June/February)
+- storage: 10 тестов (Create success/duplicate, Get success/not-found, List, Update success/not-found, Delete not-found, SpendForCategory success/no-rows)
+- transport/http: 5 тестов (Create success/zero-limit-rejected, unauthorized, Status ok/not-found)
+
+**Ключевые эталоны:**
+- Rollover months_3: limit 15000, 3 месяца по 5000 spent → rollover 30000 (3 × 10000 remainder) ✓
+- Overspent month: May overspent 20000 (limit 10000) → contributes 0; April+March по 5000 → rollover 10000 ✓
+- Status at_risk: day 1 of 30, spent 14000 → projected >> limit 15000, remaining ещё положительный → at_risk ✓
+- projectSpend last-day: no extrapolation, projected == spent ✓
+
+**Хорошо:**
+- **Rollover-логика изолирована в service**, SQL отдаёт только raw spend per month — чистая функция тестируется детерминированно
+- **Прогноз использует decimal division** — никаких float64, exact до scale
+- **Overspent months contribute 0** — соответствует ф.4 «перенос остатков» (только положительных)
+- **Status-classification чистая функция** от 3 параметров → тривиально тестируется
+- **Inactive budget short-circuit** — не делает spend-запросы для выключенных
+
+**Плохо / тех. долг:**
+- `RolloverUnlimited` bounded 24 месяцами (cost bound)
+- Прогноз linear (daily rate × daysIn) — не учитывает недельную сезонность. Для MVP приемлемо; ML-сезонность отложена в v1.0
+- E2E через реальный Postgres отложен
+
+---
+
+## ✅ ЭТАП 3 ЗАКРЫТ — Фичи 1-4 Level 1 полностью готовы
+
+| Фича | Пакет | Тестов | Статус |
+|---|---|---|---|
+| 1. Ручной ввод | service/operations + pii | 38 | ✅ (ранее) |
+| 2. Авто-категоризация | service/categorization | 28 | ✅ |
+| 3. Дашборд | service/dashboard | 20 | ✅ |
+| 4. Бюджеты | service/budget | 33 | ✅ |
+
+Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Все деньги — строго decimal. Rollover/прогноз/агрегации — decimal end-to-end.
+
+---
+
+## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — СЛЕДУЮЩИЙ ШАГ
+
+Используют готовое mathcore (tvm/credit/investment/tax):
+- Фича 5: трекер целей (аннуитет из credit + tvm.CompoundInterest)
+- Фича 6: калькулятор вкладов (tvm.CompoundInterest + daycount + tax.DepositTax + tvm.FisherRealRate)
+- Фича 7: кредитный калькулятор (credit.Annuity/Differentiated + credit.PSK + credit.EarlyRepayment)
+- Фича 8: анализ доступности кредита (стресс-тест по минимальному доходу)
+- Фича 9: ипотека vs аренда (точка безубыточности)
+
 Этап 5: AI stub (fallback-шаблоны)
 Этап 6: CSV/Excel импорт + OpenAPI + E2E
 

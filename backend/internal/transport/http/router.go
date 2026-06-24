@@ -7,7 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
+	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/internal/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
 	"github.com/RedEye472-afk/FinHelper/internal/storage"
 )
@@ -29,6 +31,11 @@ type Deps struct {
 	// /categories + /categorization routes. The operations service is wired
 	// with it separately via SetCategorizer in main().
 	Categorization *categorization.Service
+	// Dashboard is the summary service for ф.3. nil = skip mounting /dashboard.
+	Dashboard *dashboard.Service
+	// Budget is the per-category limit service for ф.4. nil = skip mounting
+	// /budgets.
+	Budget *budget.Service
 }
 
 // NewRouter mounts the public and authenticated route groups under /api/v1.
@@ -74,6 +81,12 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 			}
 			if deps.Categorization != nil {
 				NewCategoriesHandler(deps.Pool, deps.Categorization, deps.Logger).Register(r)
+			}
+			if deps.Dashboard != nil {
+				NewDashboardHandler(deps.Dashboard, deps.Logger).Register(r)
+			}
+			if deps.Budget != nil {
+				NewBudgetHandler(deps.Budget, deps.Logger).Register(r)
 			}
 
 			// Example placeholder so the group is non-empty and verified by
