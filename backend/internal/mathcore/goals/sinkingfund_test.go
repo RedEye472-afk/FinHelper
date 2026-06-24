@@ -70,3 +70,48 @@ func TestSolveFutureValue_NegativePeriods_Error(t *testing.T) {
 		t.Errorf("expected ErrInvalidPeriods for n<0")
 	}
 }
+
+func TestSolveContribution_Compound(t *testing.T) {
+	// Симметричный к SolveFutureValue: P=100000, S=239507.53, i=0.01, n=12 → A≈10000
+	P := decimal.NewFromInt(100000)
+	S, _ := decimal.NewFromString("239507.53")
+	i := decimal.NewFromFloat(0.01)
+	got, err := SolveContribution(P, S, i, 12)
+	if err != nil {
+		t.Fatalf("SolveContribution: %v", err)
+	}
+	// Возврат должно дать ~10000 (с точностью до копеек округления эталона)
+	if !moneyClose(got, decimal.NewFromInt(10000)) {
+		t.Errorf("SolveContribution = %s, want ~10000", got)
+	}
+}
+
+func TestSolveContribution_ZeroRate_Fallback(t *testing.T) {
+	// i=0 → A = (S−P)/n = (200000−100000)/12 = 8333.33...
+	got, err := SolveContribution(decimal.NewFromInt(100000), decimal.NewFromInt(200000), decimal.Zero, 12)
+	if err != nil {
+		t.Fatalf("SolveContribution: %v", err)
+	}
+	want, _ := decimal.NewFromString("8333.33")
+	if !moneyClose(got, want) {
+		t.Errorf("zero-rate fallback = %s, want ~8333.33", got)
+	}
+}
+
+func TestSolveContribution_NegativePeriods_Error(t *testing.T) {
+	_, err := SolveContribution(decimal.NewFromInt(100000), decimal.NewFromInt(200000), decimal.NewFromFloat(0.01), -1)
+	if err == nil {
+		t.Errorf("expected ErrInvalidPeriods for n<0")
+	}
+}
+
+func TestSolveContribution_AlreadyReached_Zero(t *testing.T) {
+	// P=200000, S=100000, n=12 → grown > S, A должно быть 0 (не отрицательным)
+	got, err := SolveContribution(decimal.NewFromInt(200000), decimal.NewFromInt(100000), decimal.NewFromFloat(0.01), 12)
+	if err != nil {
+		t.Fatalf("SolveContribution: %v", err)
+	}
+	if got.IsNegative() {
+		t.Errorf("contribution must not be negative when target reached, got %s", got)
+	}
+}
