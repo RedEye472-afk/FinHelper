@@ -154,3 +154,55 @@ func TestSolveTerm_AlreadyReached_Zero(t *testing.T) {
 		t.Errorf("expected n=0 when P>=S, got %s", got)
 	}
 }
+
+func TestInflateTarget_PositiveInflation(t *testing.T) {
+	// S=1000000, π=0.06, n=24 мес (2 года) → 1000000·(1.06)^2 = 1123600
+	got, err := InflateTarget(decimal.NewFromInt(1000000), decimal.NewFromFloat(0.06), 24)
+	if err != nil {
+		t.Fatalf("InflateTarget: %v", err)
+	}
+	want, _ := decimal.NewFromString("1123600")
+	if !moneyClose(got, want) {
+		t.Errorf("InflateTarget = %s, want near %s", got, want)
+	}
+}
+
+func TestInflateTarget_PartialYear(t *testing.T) {
+	// n=6 мес → степень 0.5: (1.06)^0.5 = √1.06 ≈ 1.0295630141
+	// 1000000·1.0295630141 ≈ 1029563.01
+	got, err := InflateTarget(decimal.NewFromInt(1000000), decimal.NewFromFloat(0.06), 6)
+	if err != nil {
+		t.Fatalf("InflateTarget: %v", err)
+	}
+	want, _ := decimal.NewFromString("1029563.01")
+	if !moneyClose(got, want) {
+		t.Errorf("InflateTarget partial-year = %s, want near %s", got, want)
+	}
+}
+
+func TestInflateTarget_ZeroInflation_Unchanged(t *testing.T) {
+	got, err := InflateTarget(decimal.NewFromInt(1000000), decimal.Zero, 24)
+	if err != nil {
+		t.Fatalf("InflateTarget: %v", err)
+	}
+	if !got.Equal(decimal.NewFromInt(1000000)) {
+		t.Errorf("zero inflation should return S unchanged, got %s", got)
+	}
+}
+
+func TestInflateTarget_ZeroMonths_Unchanged(t *testing.T) {
+	got, err := InflateTarget(decimal.NewFromInt(1000000), decimal.NewFromFloat(0.06), 0)
+	if err != nil {
+		t.Fatalf("InflateTarget: %v", err)
+	}
+	if !got.Equal(decimal.NewFromInt(1000000)) {
+		t.Errorf("zero months should return S unchanged, got %s", got)
+	}
+}
+
+func TestInflateTarget_Deflation100_Error(t *testing.T) {
+	_, err := InflateTarget(decimal.NewFromInt(1000000), decimal.NewFromInt(-1), 24)
+	if err != ErrDeflation100Percent {
+		t.Errorf("expected ErrDeflation100Percent, got %v", err)
+	}
+}

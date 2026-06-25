@@ -104,3 +104,34 @@ func SolveTerm(P, S, A, i decimal.Decimal) (decimal.Decimal, error) {
 	}
 	return lnRatio.Div(lnBase), nil
 }
+
+// InflateTarget adjusts a nominal target for inflation over n months:
+//
+//	S_инфл = S · (1+π)^(n/12)
+//
+// Variables: S nominal target, π annual inflation (fraction), n months.
+// Source: MATH_FORMULAS.md §1.4 (Fisher); BUSINESS_LOGIC ф.5 "корректировка
+// цели на инфляцию".
+//
+// Edge cases:
+//   - π = 0  → returns S unchanged (no inflation to apply)
+//   - months = 0 → returns S unchanged (zero horizon)
+//   - π = -1 → ErrDeflation100Percent (1+π = 0, can't raise to a power)
+func InflateTarget(S, inflation decimal.Decimal, months int) (decimal.Decimal, error) {
+	if inflation.IsZero() || months == 0 {
+		return S, nil
+	}
+	one := decimal.NewFromInt(1)
+	denom := one.Add(inflation)
+	if denom.IsZero() {
+		return decimal.Zero, ErrDeflation100Percent
+	}
+	// yearsExp = months / 12 — fractional exponent keeps partial-year horizons exact.
+	yearsExp := decimal.NewFromInt(int64(months)).Div(decimal.NewFromInt(12))
+	factor := denom.Pow(yearsExp) // shopspring v1.4.0: Pow(Decimal) Decimal, проглатывает ошибки Ln/ExpTaylor
+	if factor.IsZero() {
+		// Защита от zero-value из Pow на undefined input (negative base + fractional exp).
+		return decimal.Zero, ErrDeflation100Percent
+	}
+	return S.Mul(factor), nil
+}
