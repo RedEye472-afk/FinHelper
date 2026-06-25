@@ -498,10 +498,94 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 
 ---
 
-## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — СЛЕДУЮЩИЙ ШАГ
+## 🔄 Этап 4 / Фича 5 — Трекер целей (В РАБОТЕ: mathcore готов, остальное по плану)
 
-Используют готовое mathcore (tvm/credit/investment/tax):
-- Фича 5: трекер целей (аннуитет из credit + tvm.CompoundInterest)
+**Цель:** BUSINESS_LOGIC.md ф.5 — трекер финансовых целей: CRUD целей + журнал
+внеплановых пополнений (идемпотентный) + проекция статуса + what-if симуляция,
+на формулах фонда возмещения (Копнова Гл. 3.3.3).
+
+**Ветка:** `feat/goal-tracker-ф5` (базовый SHA `0392f00` от main, HEAD `c2bf276`).
+Коммиты в этой ветке:
+- `08f322f` feat(goals): mathcore package doc + sentinels
+- `f5a73a4` feat(goals): SolveFutureValue + tests
+- `a5f1bc1` feat(goals): SolveContribution + tests
+- `c2bf276` feat(goals): SolveTerm + tests (Ln with precision)
+
+**Документы дизайна/плана (созданы, закоммичены в main):**
+- `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` — спецификация (8 секций)
+- `docs/superpowers/plans/2026-06-25-goal-tracker.md` — план из 18 задач (TDD, bite-sized)
+
+**Зафиксированные решения (из brainstorming):**
+| Решение | Выбор |
+|---|---|
+| Охват | Всё сразу: CRUD + проекция + журнал пополнений + what-if |
+| Математика | Аналитика + инфляция (sinking fund, без численного solver'а) |
+| Идемпотентность пополнений | `contribution_id` (client-generated) + UNIQUE — консистентно с ф.1 `calc_id` |
+| Модель `current_amount` | Гибрид: `goals.current_amount` (baseline) + Σ `goal_contributions` = effective |
+| Пакет формул | НОВЫЙ `mathcore/goals/` (не credit!) — sinking fund не покрывается существующими |
+
+**Что УЖЕ СДЕЛАНО (Задачи 1-4 плана):**
+- `internal/mathcore/goals/doc.go` — package doc + sentinel errors
+  (`ErrNonPositiveTarget`/`ErrNonPositiveContribution`/`ErrInvalidPeriods`/
+  `ErrUnreachable`/`ErrInvalidRate`/`ErrDeflation100Percent`)
+- `internal/mathcore/goals/sinkingfund.go` — 3 функции sinking fund:
+  - `SolveFutureValue(P,A,i,n)` → `S = P·(1+i)^n + A·((1+i)^n−1)/i` (fallback `P+A·n` при i=0)
+  - `SolveContribution(P,S,i,n)` → `A = (S−P·(1+i)^n)·i/((1+i)^n−1)` (fallback `(S−P)/n`; 0 если цель достигнута ростом капитала)
+  - `SolveTerm(P,S,A,i)` → `n = ln((S·i+A)/(A+P·i))/ln(1+i)` (ErrInvalidRate при i≤0; ErrUnreachable при `A ≤ P·i`; 0 при `P≥S`)
+- `internal/mathcore/goals/sinkingfund_test.go` — **12 тестов, все зелёные**:
+  - golden: FutureValue 239507.53 (P=100k,A=10k,i=1%,n=12), round-trip (SolveContribution от 239507.53 ≈ 10000)
+  - edge-cases: zero-rate fallback, n=0, n<0, already-reached (0), unreachable (ErrUnreachable), i=0 для SolveTerm
+
+**Верификация (25.06):** `go build ./internal/mathcore/goals/` + `go vet` + `go test` → BUILD_OK / VET_OK / 12/12 PASS
+
+**КРИТИЧЕСКАЯ НАХОДКА (та же категория багов, что Этап 0/2/4 — doc↔API рассинхрон):**
+В shopspring/decimal v1.4.0 сигнатуры трансцендентных функций НЕ однородны:
+- `Pow(d2 Decimal) Decimal` — возвращает Decimal **без error** (внутри сам проглатывает ошибки `Ln`+`ExpTaylor`)
+- `Ln(precision int32) (Decimal, error)` — возвращает **(Decimal, error)**, требует явный precision
+
+Поэтому `SolveFutureValue`/`SolveContribution` (через `Pow`) пишутся тривиально, а
+`SolveTerm` (через `Ln`) требует обработки двух ошибок + precision=16 (=`decimal.DivisionPrecision`
+по умолчанию). Если когда-либо заменим decimal-либу — перепроверить ВСЕ трансцендентные вызовы.
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
+Фича 5 — НЕ «переиспользует credit пакет», как гласил roadmap ниже. `credit.AnnuityPayment`
+считает **погашение кредита** (отрицательный поток, амортизация долга), а `tvm.CompoundInterest`
+работает с **одноразовым principal**. Задача «накопить к сроку регулярными взносами с
+доходностью» — это **фонд возмещения** (sinking fund), для которого потребовался
+**новый** `mathcore/goals/`. Число documented float64-bridges осталось = 2 (sinking fund
+решается аналитически, без BrentQ).
+
+**Что ОСТАЛОСЬ (Задачи 5-18 плана, передаётся в новый чат):**
+1. Task 5 — `InflateTarget(S,π,n)` = `S·(1+π)^(n/12)` + тесты (π=0 без изменений, π=−1 error)
+2. Task 6 — `internal/domain/goal.go`: Goal, GoalContribution, GoalStatus, ValidateGoal
+3. Task 7 — `migrations/0003_goals_contributions.sql` (журнал пополнений + UNIQUE для идемпотентности)
+4. Tasks 8-9 — `internal/storage/goals.go`: CRUD goals + contributions (CRUD + SumContributions) + sqlmock-тесты
+5. Tasks 10-11 — `internal/service/goals/goals.go`: Repo interface, CRUD, идемпотентный AddContribution, Projection, Simulate
+6. Task 12 — `internal/service/goals/goals_test.go`: fakeRepo + сценарные тесты
+7. Task 13 — `internal/transport/http/goals.go`: handler (11 эндпоинтов)
+8. Tasks 14-15 — wiring в `router.go` (Deps.Goals) + `main.go`
+9. Task 16 — `internal/transport/http/goals_test.go`: httptest + fakeRepo
+10. Task 17 — `internal/storage/dashboard.go::GoalProgresses`: + `COALESCE(SUM(contributions),0)` (гибридная модель)
+11. Task 18 — финальная верификация + эта секция PROGRESS → «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН»
+
+**Паттерн-эталон для оставшихся слоёв:** пакет `budget` (service/storage/transport/http) —
+полная симметрия. Конвенции: ID → BIGINT IDENTITY, Money → NUMERIC(28,2) строкой в JSON,
+идемпотентность в стиле ф.1 (`INSERT…RETURNING` + `translatePgError` → sentinel → fetch оригинала),
+handler-стиль `decodeJSON`/`writeJSON`/`writeError`/`MustUserID`.
+
+**Как продолжить в новом чате:**
+1. Прочитать `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` (контекст)
+2. Прочитать `docs/superpowers/plans/2026-06-25-goal-tracker.md` (Задачи 5-18 — полный код в каждом шаге)
+3. `git -C C:/Users/user/ZCodeProject/FinHelper checkout feat/goal-tracker-ф5`
+4. Продолжить с **Task 5** (InflateTarget) по плану
+5. По завершении всех 18 задач — слить ветку в main, обновить эту секцию до «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН»
+
+---
+
+## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — ПРОДОЛЖЕНИЕ
+
+Используют готовое mathcore (tvm/credit/investment/tax/goals):
+- Фича 5: трекер целей — **В РАБОТЕ** (см. секцию выше; mathcore/goals готов, Tasks 5-18 в плане)
 - Фича 6: калькулятор вкладов (tvm.CompoundInterest + daycount + tax.DepositTax + tvm.FisherRealRate)
 - Фича 7: кредитный калькулятор (credit.Annuity/Differentiated + credit.PSK + credit.EarlyRepayment)
 - Фича 8: анализ доступности кредита (стресс-тест по минимальному доходу)
