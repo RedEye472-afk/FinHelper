@@ -115,14 +115,45 @@ type USNRules struct {
 	Source                  string `yaml:"source"`
 }
 
-// NDFL rules (НК РФ Гл. 23).
+// NDFL rules (НК РФ Гл. 23). Progressive scale is encoded as ordered Brackets
+// (preferred). Legacy 2-step configs without Brackets fall back to
+// BaseRate/HighRate/HighIncomeThreshold via NDFLBrackets().
 type NDFLRules struct {
-	BaseRate             Dec    `yaml:"base_rate"`
-	HighRate             Dec    `yaml:"high_rate"`
-	HighIncomeThreshold  Dec    `yaml:"high_income_threshold"`
-	ChildDeduction1      Dec    `yaml:"child_deduction_1"`
-	ChildDeduction3      Dec    `yaml:"child_deduction_3"`
-	PropertyDeductionMax Dec    `yaml:"property_deduction_max"`
-	IISDeductionMax      Dec    `yaml:"iis_deduction_max"`
-	Source               string `yaml:"source"`
+	BaseRate             Dec       `yaml:"base_rate"`
+	HighRate             Dec       `yaml:"high_rate,omitempty"`
+	HighIncomeThreshold  Dec       `yaml:"high_income_threshold,omitempty"`
+	// Brackets — progressive-scale brackets, ordered by ascending up_to. Each
+	// bracket applies its rate to the slice of taxable income in
+	// (previous up_to, this up_to]. up_to == 0 means "to infinity" (the top
+	// bracket). Empty → NDFLBrackets() synthesises a 2-step scale from the
+	// legacy fields. Active for 2025+ (ФЗ-257 от 12.12.2024).
+	Brackets             []Bracket `yaml:"brackets,omitempty"`
+	ChildDeduction1      Dec       `yaml:"child_deduction_1"`
+	ChildDeduction3      Dec       `yaml:"child_deduction_3"`
+	PropertyDeductionMax Dec       `yaml:"property_deduction_max"`
+	IISDeductionMax      Dec       `yaml:"iis_deduction_max"`
+	Source               string    `yaml:"source"`
+}
+
+// Bracket is one step of the progressive НДФЛ scale. UpTo == 0 denotes the
+// uncapped top bracket. Rate is the marginal rate applied to the slice of
+// income falling inside this bracket.
+type Bracket struct {
+	UpTo  Dec `yaml:"up_to"`
+	Rate  Dec `yaml:"rate"`
+}
+
+// NDFLBrackets returns the effective progressive brackets: explicit Brackets
+// if configured, otherwise a 2-step scale synthesised from the legacy
+// HighIncomeThreshold/HighRate fields (with BaseRate below the threshold).
+// This keeps NDFL() working for pre-2025 configs that predate the brackets
+// field and lets callers inspect the active scale for UI display.
+func (n NDFLRules) NDFLBrackets() []Bracket {
+	if len(n.Brackets) > 0 {
+		return n.Brackets
+	}
+	return []Bracket{
+		{UpTo: n.HighIncomeThreshold, Rate: n.BaseRate},
+		{UpTo: Dec{}, Rate: n.HighRate},
+	}
 }
