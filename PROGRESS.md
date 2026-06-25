@@ -303,6 +303,72 @@ Documented float64 bridges: ровно 2 (credit/BrentQ через PSK, пере
 
 ---
 
+## ✅ Сверка со справочными материалами (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 25.06)
+
+**Цель:** прогнать mathcore и налоговые конфиги против папки `справочные_материалы/`
+(Источники 1–6: Копнова, формулы-справочник, налоговые вычеты РФ 2025–2026) — достигнута.
+Принцип проекта «doc↔код не должен расходиться»: эталоны в коде — источник истины,
+документация правится под них.
+
+**Найденные расхождения (та же категория багов, что Этап 0 / Задачи 4–5):**
+
+1. **Ключевая ставка ЦБ на 01.01.2026** — критическая ошибка в `tax_rules_2026.yaml`:
+   было `21%` (предположительное значение), стало `16%` (фактическое — действовала
+   с 19.12.2025, следующее изменение 13.02.2026 до 15.5%). Источник:
+   `04_fin_formuly_i_raschety_spravochnik.md §9`, `05_nalogovye_vychety_rf_2025_2026.md §7`.
+   Ставки на 01.01.2024 (16%) и 01.01.2025 (21%) были корректны, не трогались.
+   → обновлены все 6 копий YAML (3 в `backend/configs/` + 3 в `internal/mathcore/tax/configs/`,
+     включая правку неверного комментария в 2024-конфиге, где тоже упоминалось «2026 = 21%»).
+
+2. **НДФЛ — прогрессивная шкала с 2025 (ФЗ-257 от 12.12.2024)** — устаревшая модель:
+   в коде была 2-ступенчатая (13%/15% свыше 5М), верная только для 2024. С 2025 — 5 ступеней:
+   13% до 2.4М / 15% до 5М / 18% до 20М / 20% до 50М / 22% свыше.
+   Источник: `05_nalogovye_vychety_rf_2025_2026.md §0, §8`.
+   → переработка:
+     - `tax.go::NDFLRules` — новый тип `Bracket` + поле `Brackets []Bracket`,
+       метод `NDFLBrackets()` (explicit brackets или fallback на legacy-поля);
+     - `ndfl.go::NDFL` — universal marginal-bracket движок (проходит по ступеням,
+       считает slice = min(remaining, width) × rate); добавлен sentinel
+       `ErrUnknownNDFLScale` для misconfigured года;
+     - конфиги 2025/2026 — 5 brackets; 2024 — и 2 brackets, и legacy-поля (обратная
+       совместимость со старым golden-тестом);
+     - `tax_test.go` — +7 тестов: 5-step на 7M (=1062000), 5-step top-bracket на
+       60M (=11602000), граница 1-й ступени 2026 (2.4M→312000), эквивалентность
+       2024 brackets↔legacy, NDFLBrackets sanity, deposit 2026 при ставке 16%
+       (interest 300000 → tax 18200, threshold 160000).
+   - **2024 намеренно оставлен 2-ступенчатым** — ФЗ-257 действует с доходов 2025.
+
+**Что проверено, расхождений НЕ найдено:**
+- `tvm/` — простой/сложный процент, эффективная ставка, Фишер = файл 4 §1, §7.1, Копнова Гл. 1.
+- `credit/` — аннуитет 47073.47 (Excel ПЛТ), ПСК по ЦБ 5750-У, дифференцированный = файл 4 §2.1/§3.5.
+- `investment/` — NPV -2103.68, XIRR (round-trip NPV@XIRR≈0), MIRR 0.08631=∛1.28192,
+  PI 0.97896 = файл 4 §4.1–4.5.
+- НПД, УСН, deposit-tax (для 2024/2025) = НК РФ Гл. 23/26.2, ФЗ-422, ФЗ-382.
+
+**Верификация (25.06):** `go build ./...` → BUILD_OK; `go vet ./...` → VET_OK;
+`go test ./...` → **все 20 пакетов зелёные** (tax теперь 20 тестов вместо 16).
+
+**Хорошо:**
+- Bracket-движок universal: добавление 6-й ступени в будущем = одна строка в YAML, код не меняется
+- Legacy-fallback сохраняет обратную совместимость — старые конфиги без `brackets` работают
+- Каждое изменение эталонов сверено с источником (ЦБ РФ / ФЗ-257), не выдумано
+- Принцип «doc↔код не расходятся» соблюдён: doc-значения в коде теперь = справочные материалы
+
+**Плохо / тех. долг:**
+- Дублирование `backend/configs/` и `internal/mathcore/tax/configs/` по-прежнему не устранено
+  (6 файлов вместо 3). Когда будет CI — сделать embed-директиву с относительным путём
+  к единственному канону в `backend/configs/`.
+- Ставки ЦБ в YAML по-прежнему «заморожены» на момент правки; для автoupdate нужен
+  адаптер к API ЦБ РФ (в scope MVP не входит).
+
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
+НДФЛ в `tax.NDFL()` считается **marginally** (каждая ступень применяется только к slice
+базы в её диапазоне), не «всё по ставке верхней ступени». Это соответствует НК РФ ст. 224.
+Старый 2-ступенчатый расчёт 2024 математически эквивалентен новому bracket-движку —
+сверено тестом `TestNDFL_2024_BracketsEquivalentToLegacy`.
+
+---
+
 ## ✅ Этап 3 / Фича 1 — Ручной ввод операций (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
 
 **Цель:** BUSINESS_LOGIC.md ф.1 — ручной ввод операций с идемпотентностью, PII-маскированием, детерминированным пересчётом балансов — достигнута.
@@ -498,7 +564,7 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 
 ---
 
-## 🔄 Этап 4 / Фича 5 — Трекер целей (В РАБОТЕ: mathcore готов, остальное по плану)
+## 🔄 Этап 4 / Фича 5 — Трекер целей (В РАБОТЕ: Tasks 1-7 готовы, 8-18 по плану)
 
 **Цель:** BUSINESS_LOGIC.md ф.5 — трекер финансовых целей: CRUD целей + журнал
 внеплановых пополнений (идемпотентный) + проекция статуса + what-if симуляция,
@@ -555,10 +621,11 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 **новый** `mathcore/goals/`. Число documented float64-bridges осталось = 2 (sinking fund
 решается аналитически, без BrentQ).
 
-**Что ОСТАЛОСЬ (Задачи 5-18 плана, передаётся в новый чат):**
-1. Task 5 — `InflateTarget(S,π,n)` = `S·(1+π)^(n/12)` + тесты (π=0 без изменений, π=−1 error)
-2. Task 6 — `internal/domain/goal.go`: Goal, GoalContribution, GoalStatus, ValidateGoal
-3. Task 7 — `migrations/0003_goals_contributions.sql` (журнал пополнений + UNIQUE для идемпотентности)
+**Что ОСТАЛОСЬ (Задачи 8-18 плана, передаётся в новый чат):**
+1. ~~Task 5 — `InflateTarget(S,π,n)` = `S·(1+π)^(n/12)` + тесты~~ ✅ ВЫПОЛНЕНО
+   (π=0/months=0 без изменений, π=−1 → ErrDeflation100Percent; +5 тестов, mathcore/goals теперь 17/17)
+2. ~~Task 6 — `internal/domain/goal.go`: Goal, GoalContribution, GoalStatus, ValidateGoal~~ ✅ ВЫПОЛНЕНО
+3. ~~Task 7 — `migrations/0003_goals_contributions.sql` (журнал пополнений + UNIQUE для идемпотентности)~~ ✅ ВЫПОЛНЕНО
 4. Tasks 8-9 — `internal/storage/goals.go`: CRUD goals + contributions (CRUD + SumContributions) + sqlmock-тесты
 5. Tasks 10-11 — `internal/service/goals/goals.go`: Repo interface, CRUD, идемпотентный AddContribution, Projection, Simulate
 6. Task 12 — `internal/service/goals/goals_test.go`: fakeRepo + сценарные тесты
@@ -568,6 +635,17 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 10. Task 17 — `internal/storage/dashboard.go::GoalProgresses`: + `COALESCE(SUM(contributions),0)` (гибридная модель)
 11. Task 18 — финальная верификация + эта секция PROGRESS → «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН»
 
+**Важно: поправки к плану (найдены при сверке кода, учесть при реализации 8-18):**
+- Task 10 плана содержит опечатку `decimalYield` → должно быть `decimal.Decimal` (в плане помечено).
+- Task 12: `string(int64)` не компилируется → `strconv.FormatInt`; метод `ClientKey()` на чужом
+  типе `domain.GoalContribution` определить нельзя — использовать свободную функцию `clientKey(...)`.
+- Task 13: обёртка `parseAndSimulate` с `context.Context` избыточна и тянет неиспользуемый импорт —
+  в плане предложено упростить (декодировать и звать `svc.Simulate` напрямую).
+- `testSlogLogger()` уже определён в `transport/http/budgets_test.go` — НЕ дублировать в goals_test.go.
+- План кладёт `domain.Goal` сквозь все слои (storage→service→http). Это расходится с эталонным
+  пакетом `budget`, где в storage/service ходит `storage.Budget`. Оба варианта рабочие; следовать
+  плану (`domain.Goal`) — меньше конверсий на границах.
+
 **Паттерн-эталон для оставшихся слоёв:** пакет `budget` (service/storage/transport/http) —
 полная симметрия. Конвенции: ID → BIGINT IDENTITY, Money → NUMERIC(28,2) строкой в JSON,
 идемпотентность в стиле ф.1 (`INSERT…RETURNING` + `translatePgError` → sentinel → fetch оригинала),
@@ -575,17 +653,17 @@ handler-стиль `decodeJSON`/`writeJSON`/`writeError`/`MustUserID`.
 
 **Как продолжить в новом чате:**
 1. Прочитать `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` (контекст)
-2. Прочитать `docs/superpowers/plans/2026-06-25-goal-tracker.md` (Задачи 5-18 — полный код в каждом шаге)
-3. `git -C C:/Users/user/ZCodeProject/FinHelper checkout feat/goal-tracker-ф5`
-4. Продолжить с **Task 5** (InflateTarget) по плану
-5. По завершении всех 18 задач — слить ветку в main, обновить эту секцию до «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН»
+2. Прочитать `docs/superpowers/plans/2026-06-25-goal-tracker.md` (Задачи 8-18 — полный код в каждом шаге)
+3. Ветка `feat/goal-tracker-ф5` уже активна (HEAD после Tasks 1-7 + сверка справочников).
+4. Продолжить с **Task 8** (storage/goals.go) по плану, учитывая поправки выше.
+5. По завершении всех 18 задач — слить ветку в main, обновить эту секцию до «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН».
 
 ---
 
 ## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — ПРОДОЛЖЕНИЕ
 
 Используют готовое mathcore (tvm/credit/investment/tax/goals):
-- Фича 5: трекер целей — **В РАБОТЕ** (см. секцию выше; mathcore/goals готов, Tasks 5-18 в плане)
+- Фича 5: трекер целей — **В РАБОТЕ** (см. секцию выше; Tasks 1-7 готовы: mathcore/goals + domain/goal + миграция 0003; Tasks 8-18 в плане)
 - Фича 6: калькулятор вкладов (tvm.CompoundInterest + daycount + tax.DepositTax + tvm.FisherRealRate)
 - Фича 7: кредитный калькулятор (credit.Annuity/Differentiated + credit.PSK + credit.EarlyRepayment)
 - Фича 8: анализ доступности кредита (стресс-тест по минимальному доходу)
