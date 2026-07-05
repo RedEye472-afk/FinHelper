@@ -194,6 +194,7 @@ func TestNDFL_Golden(t *testing.T) {
 
 func TestNDFL_ProgressiveHighRate(t *testing.T) {
 	// Income 7M, no deductions: 5M × 0.13 + 2M × 0.15 = 650000 + 300000 = 950000.
+	// (2024 — 2-step scale.)
 	r := MustLoadRules(2024)
 	got, err := NDFL(r, d("7000000"), d("0"))
 	if err != nil {
@@ -201,6 +202,105 @@ func TestNDFL_ProgressiveHighRate(t *testing.T) {
 	}
 	if !got.Equal(d("950000")) {
 		t.Errorf("NDFL progressive: got %s, want 950000", got)
+	}
+}
+
+// 5-ступенчатая шкала с 2025 (ФЗ-257): 2.4M@13 / 5M@15 / 20M@18 / 50M@20 / ∞@22.
+func TestNDFL_FiveStepScale_2025(t *testing.T) {
+	r := MustLoadRules(2025)
+	// 7M без вычетов:
+	//   2.4M × 0.13 = 312000
+	//   2.6M × 0.15 = 390000   (5M − 2.4M)
+	//   2.0M × 0.18 = 360000   (7M − 5M)
+	//   итого 1062000
+	got, err := NDFL(r, d("7000000"), d("0"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !got.Equal(d("1062000")) {
+		t.Errorf("NDFL 2025 7M: got %s, want 1062000", got)
+	}
+}
+
+func TestNDFL_FiveStepScale_TopBracket_2025(t *testing.T) {
+	r := MustLoadRules(2025)
+	// 60M — попадает в верхнюю (5-ю) ступень свыше 50M:
+	//   2.4M × 0.13 =   312000
+	//   2.6M × 0.15 =   390000
+	//  15.0M × 0.18 =  2700000   (20M − 5M)
+	//  30.0M × 0.20 =  6000000   (50M − 20M)
+	//  10.0M × 0.22 =  2200000   (60M − 50M)
+	//   итого 11602000
+	got, err := NDFL(r, d("60000000"), d("0"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !got.Equal(d("11602000")) {
+		t.Errorf("NDFL 2025 60M: got %s, want 11602000", got)
+	}
+}
+
+func TestNDFL_FiveStepScale_FirstBracketBoundary_2026(t *testing.T) {
+	// Ровно граница 1-й ступени: 2.4M × 0.13 = 312000.
+	r := MustLoadRules(2026)
+	got, err := NDFL(r, d("2400000"), d("0"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !got.Equal(d("312000")) {
+		t.Errorf("NDFL 2026 2.4M boundary: got %s, want 312000", got)
+	}
+}
+
+func TestNDFL_2024_BracketsEquivalentToLegacy(t *testing.T) {
+	// 2024 хранит и brackets (2 шага), и legacy-поля; сравниваем результат
+	// с эталоном старой 2-ступенчатой формулы на нескольких точках.
+	r := MustLoadRules(2024)
+	cases := []struct {
+		income string
+		want   string
+	}{
+		{"1000000", "130000"},   // только 1-я ступень
+		{"5000000", "650000"},   // ровно граница
+		{"12000000", "1700000"}, // 5M×0.13 + 7M×0.15 = 650000 + 1050000
+	}
+	for _, c := range cases {
+		got, err := NDFL(r, d(c.income), d("0"))
+		if err != nil {
+			t.Fatalf("NDFL(%s): %v", c.income, err)
+		}
+		if !got.Equal(d(c.want)) {
+			t.Errorf("NDFL 2024 income=%s: got %s, want %s", c.income, got, c.want)
+		}
+	}
+}
+
+func TestNDFLBrackets_ReflectsActiveScale(t *testing.T) {
+	// 2025+ — явно 5 ступеней из конфига; 2024 — синтез 2 ступней из legacy.
+	if got := len(MustLoadRules(2025).NDFL.NDFLBrackets()); got != 5 {
+		t.Errorf("2025 brackets: got %d, want 5", got)
+	}
+	if got := len(MustLoadRules(2024).NDFL.NDFLBrackets()); got != 2 {
+		t.Errorf("2024 fallback brackets: got %d, want 2", got)
+	}
+}
+
+func TestDepositTax_2026_KeyRate16(t *testing.T) {
+	// Сверка со справочником: на 01.01.2026 ставка = 16% (не 21%).
+	// threshold = 1M × 0.16 = 160000. interest 300000 → 140000 × 0.13 = 18200.
+	r := MustLoadRules(2026)
+	if !r.KeyRateJan1.Value().Equal(d("0.16")) {
+		t.Fatalf("2026 key_rate_jan1: got %s, want 0.16", r.KeyRateJan1.Value())
+	}
+	if got := Threshold(r); !got.Equal(d("160000")) {
+		t.Fatalf("2026 threshold: got %s, want 160000", got)
+	}
+	got, err := DepositTax(r, d("300000"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !got.Equal(d("18200")) {
+		t.Errorf("deposit tax 2026: got %s, want 18200 (300000-160000)×0.13", got)
 	}
 }
 

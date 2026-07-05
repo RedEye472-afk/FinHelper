@@ -61,6 +61,16 @@ func NewService(repo Repo) *Service {
 	return &Service{repo: repo, now: time.Now}
 }
 
+// NewServiceWithNow is like NewService but with an injected clock. Tests pin
+// the current time so day-of-month-sensitive projections (projectSpend,
+// periodDayCounts) become deterministic. Production code should use NewService.
+func NewServiceWithNow(repo Repo, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
+	return &Service{repo: repo, now: now}
+}
+
 // Sentinel errors.
 var (
 	// ErrInvalidArgument — request failed validation.

@@ -117,6 +117,18 @@ func (m Money) Neg() Money { return Money{v: m.v.Neg()} }
 // Equal reports whether two Money values are exactly equal.
 func (m Money) Equal(b Money) bool { return m.v.Equal(b.v) }
 
+// GreaterThan reports m > b.
+func (m Money) GreaterThan(b Money) bool { return m.v.GreaterThan(b.v) }
+
+// GreaterThanOrEqual reports m >= b.
+func (m Money) GreaterThanOrEqual(b Money) bool { return m.v.GreaterThanOrEqual(b.v) }
+
+// LessThan reports m < b.
+func (m Money) LessThan(b Money) bool { return m.v.LessThan(b.v) }
+
+// LessThanOrEqual reports m <= b.
+func (m Money) LessThanOrEqual(b Money) bool { return m.v.LessThanOrEqual(b.v) }
+
 // AddAll sums a slice of Money, returning Zero on nil/empty.
 func AddAll(items []Money) Money {
 	out := Zero

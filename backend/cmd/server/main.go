@@ -24,6 +24,7 @@ import (
 	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/internal/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/internal/service/goals"
 	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
 	"github.com/RedEye472-afk/FinHelper/internal/storage"
 	transporthttp "github.com/RedEye472-afk/FinHelper/internal/transport/http"
@@ -111,6 +112,9 @@ func run() error {
 		dashboardSvc := dashboard.NewService(pool)
 		// Budget service (BUSINESS_LOGIC ф.4) — per-category limits + rollover.
 		budgetSvc := budget.NewService(pool)
+		// Goals service (BUSINESS_LOGIC ф.5) — savings-goal tracker with
+		// contributions journal, projection, and what-if simulation.
+		goalsSvc := goals.NewService(pool)
 		r.Mount("/", transporthttp.NewRouter(transporthttp.Deps{
 			Pool:           pool,
 			Issuer:         issuer,
@@ -120,6 +124,7 @@ func run() error {
 			Categorization: categorizationSvc,
 			Dashboard:      dashboardSvc,
 			Budget:         budgetSvc,
+			Goals:           goalsSvc,
 		}, authMW))
 		applog.Info(ctx, logger, "api mounted",
 			"access_ttl", cfg.JWT.AccessTTL.String(),
