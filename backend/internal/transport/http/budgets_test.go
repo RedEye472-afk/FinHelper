@@ -72,7 +72,11 @@ func newBudgetTestEnv(t *testing.T) (*httptest.Server, *auth.JWTIssuer, *budgetF
 	}
 	logger := testSlogLogger()
 	repo := &budgetFakeRepo{}
-	svc := budget.NewService(repo)
+	// Pin the clock to the last nanosecond of a 30-day month so projectSpend
+	// returns spent as-is (no extrapolation) and the status tests are
+	// deterministic regardless of the real run date.
+	now := time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC)
+	svc := budget.NewServiceWithNow(repo, func() time.Time { return now })
 	mw := NewAuthMiddleware(issuer, logger)
 	h := NewBudgetHandler(svc, logger)
 
