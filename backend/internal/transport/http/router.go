@@ -8,6 +8,7 @@ import (
 
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
 	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
+	"github.com/RedEye472-afk/FinHelper/internal/service/credit"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/internal/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/internal/service/goals"
@@ -40,6 +41,9 @@ type Deps struct {
 	// Goals is the savings-goal tracker service for ф.5. nil = skip mounting
 	// /goals + /calc/goal.
 	Goals *goals.Service
+	// Credit is the loan calculator service for ф.7. nil = skip mounting
+	// /calc/credit.
+	Credit *credit.Service
 }
 
 // NewRouter mounts the public and authenticated route groups under /api/v1.
@@ -94,6 +98,9 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 			}
 			if deps.Goals != nil {
 				NewGoalsHandler(deps.Goals, deps.Logger).Register(r)
+			}
+			if deps.Credit != nil {
+				NewCreditHandler(deps.Credit, deps.Logger).Register(r)
 			}
 
 			// Example placeholder so the group is non-empty and verified by
