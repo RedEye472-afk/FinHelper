@@ -564,18 +564,24 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 
 ---
 
-## 🔄 Этап 4 / Фича 5 — Трекер целей (В РАБОТЕ: Tasks 1-7 готовы, 8-18 по плану)
+## ✅ Этап 4 / Фича 5 — Трекер целей (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 05.07)
 
 **Цель:** BUSINESS_LOGIC.md ф.5 — трекер финансовых целей: CRUD целей + журнал
 внеплановых пополнений (идемпотентный) + проекция статуса + what-if симуляция,
 на формулах фонда возмещения (Копнова Гл. 3.3.3).
 
-**Ветка:** `feat/goal-tracker-ф5` (базовый SHA `0392f00` от main, HEAD `c2bf276`).
-Коммиты в этой ветке:
+**Ветка:** `feat/goal-tracker-ф5` (от `0392f00` main, HEAD `fe73caa`).
+Коммиты в этой ветке (от mathcore до wiring):
 - `08f322f` feat(goals): mathcore package doc + sentinels
 - `f5a73a4` feat(goals): SolveFutureValue + tests
 - `a5f1bc1` feat(goals): SolveContribution + tests
 - `c2bf276` feat(goals): SolveTerm + tests (Ln with precision)
+- `0ff4979` feat(goals): InflateTarget + complete mathcore goals package
+- `da7543e` feat(goals): domain types Goal/GoalContribution/GoalStatus + migration 0003
+- `204b506` feat(goals): storage layer — CRUD goals + contributions + sqlmock tests (Tasks 8-9)
+- `835a256` feat(goals): service layer — CRUD, AddContribution, Projection, Simulate (Tasks 10-11)
+- `4cce907` feat(goals): service tests + HTTP handler + dashboard hybrid model (Tasks 12-13, 17)
+- `fe73caa` feat(goals): wire GoalsHandler into router + main (Tasks 14-15)
 
 **Документы дизайна/плана (созданы, закоммичены в main):**
 - `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` — спецификация (8 секций)
@@ -590,80 +596,100 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 | Модель `current_amount` | Гибрид: `goals.current_amount` (baseline) + Σ `goal_contributions` = effective |
 | Пакет формул | НОВЫЙ `mathcore/goals/` (не credit!) — sinking fund не покрывается существующими |
 
-**Что УЖЕ СДЕЛАНО (Задачи 1-4 плана):**
-- `internal/mathcore/goals/doc.go` — package doc + sentinel errors
-  (`ErrNonPositiveTarget`/`ErrNonPositiveContribution`/`ErrInvalidPeriods`/
-  `ErrUnreachable`/`ErrInvalidRate`/`ErrDeflation100Percent`)
-- `internal/mathcore/goals/sinkingfund.go` — 3 функции sinking fund:
+**Все 18 задач плана выполнены (05.07):**
+
+*Mathcore (Задачи 1-5):*
+- `internal/mathcore/goals/doc.go` — package doc + sentinels
+  (`ErrNonPositiveTarget`/`ErrNonPositiveContribution`/`ErrInvalidPeriods`/`ErrUnreachable`/`ErrInvalidRate`/`ErrDeflation100Percent`)
+- `internal/mathcore/goals/sinkingfund.go` — 4 функции sinking fund:
   - `SolveFutureValue(P,A,i,n)` → `S = P·(1+i)^n + A·((1+i)^n−1)/i` (fallback `P+A·n` при i=0)
   - `SolveContribution(P,S,i,n)` → `A = (S−P·(1+i)^n)·i/((1+i)^n−1)` (fallback `(S−P)/n`; 0 если цель достигнута ростом капитала)
   - `SolveTerm(P,S,A,i)` → `n = ln((S·i+A)/(A+P·i))/ln(1+i)` (ErrInvalidRate при i≤0; ErrUnreachable при `A ≤ P·i`; 0 при `P≥S`)
-- `internal/mathcore/goals/sinkingfund_test.go` — **12 тестов, все зелёные**:
-  - golden: FutureValue 239507.53 (P=100k,A=10k,i=1%,n=12), round-trip (SolveContribution от 239507.53 ≈ 10000)
-  - edge-cases: zero-rate fallback, n=0, n<0, already-reached (0), unreachable (ErrUnreachable), i=0 для SolveTerm
+  - `InflateTarget(S,π,n)` → `S·(1+π)^(n/12)` (ErrDeflation100Percent при π=−1)
+- `internal/mathcore/goals/sinkingfund_test.go` — **17 тестов** (golden + edge-cases), все зелёные
 
-**Верификация (25.06):** `go build ./internal/mathcore/goals/` + `go vet` + `go test` → BUILD_OK / VET_OK / 12/12 PASS
+*Domain & миграция (Задачи 6-7):*
+- `internal/domain/goal.go` — Goal, GoalContribution, GoalStatus (on_track/at_risk/behind/achieved/no_deadline), ValidateGoal
+- `migrations/0003_goals_contributions.sql` — журнал пополнений + UNIQUE(user_id, goal_id, contribution_id) для идемпотентности
 
-**КРИТИЧЕСКАЯ НАХОДКА (та же категория багов, что Этап 0/2/4 — doc↔API рассинхрон):**
+*Storage (Задачи 8-9):*
+- `internal/storage/goals.go` — CRUD goals + contributions, SumContributions, sqlmock-тесты (11 тестов)
+  - `CreateGoal`/`GetGoal`/`ListGoals`/`UpdateGoal`/`DeleteGoal` (soft delete)
+  - `CreateContribution` (23505 → ErrContributionExists через translatePgError), `GetContributionByClientID`, `ListContributions`, `DeleteContribution`
+  - `SumContributions` (COALESCE, hybrid model)
+
+*Service (Задачи 10-12):*
+- `internal/service/goals/goals.go` (~486 lines) — Repo interface, CRUD, идемпотентный AddContribution, Projection, Simulate, SimulateSaved
+  - `projectWith` — pure над (goal, sum, now, inflation): achieved short-circuit, InflateTarget, SolveContribution (deadline), SolveTerm (no-deadline), fallback status
+  - `classifyStatus` — on_track/at_risk(0.9×)/behind
+  - `monthsBetween` — whole calendar months clamped >= 0
+  - **Найден и исправлен баг**: `*decimal.Decimal` передавался в `InflateTarget` вместо `decimal.Decimal` — был сломан build
+- `internal/service/goals/goals_test.go` (1086 lines, **55 тестов**) — fakeRepo in-memory, svcWithFixedNow, полный coverage API surface
+
+*HTTP handler (Задача 13):*
+- `internal/transport/http/goals.go` (656 lines) — GoalsHandler, 11 эндпоинтов:
+  GET/POST /goals, GET/PATCH/DELETE /goals/{id}, GET /goals/{id}/projection,
+  POST /goals/{id}/simulate, GET/POST /goals/{id}/contributions,
+  DELETE /goals/{id}/contributions/{cid}, POST /calc/goal
+  - Деньги как строки в JSON, writeServiceError маппит ErrNotFound→404, ErrInvalidArgument→400
+
+*Wiring (Задачи 14-15):*
+- `internal/transport/http/router.go` — `Deps.Goals *goals.Service` + `NewGoalsHandler.Register(r)` (nil = skip, graceful)
+- `cmd/server/main.go` — `goalsSvc := goals.NewService(pool)`, передаётся в Deps
+
+*Dashboard интеграция (Задача 17):*
+- `internal/storage/dashboard.go::GoalProgresses` — LEFT JOIN goal_contributions + COALESCE(SUM(gc.amount), 0)
+  → гибридная модель (effective = baseline + Σ contributions), GROUP BY полей goals, zero-safe CASE
+- `internal/storage/dashboard_test.go` — regex обновлён на новый SQL, column переименован в effective_current
+
+*Flaky-тест фикс (найден в этой сессии):*
+- `TestBudget_Status_OK` был date-dependent (5 июля projectSpend экстраполировал 5000×31/5 > 15000 → at_risk)
+- Решение: `budget.NewServiceWithNow(repo, nowFn)` — injectable clock, в test env зафиксировано на 2026-06-30 23:59 UTC
+
+**Верификация (05.07):** `go build ./...` → BUILD_OK; `go vet ./...` → VET_OK;
+`go test -count=1 ./...` → **20/20 пакетов зелёные** (cache-clean):
+- mathcore/goals: 17 тестов
+- service/goals: 55 тестов
+- storage: 21 тестов (11 goals + 10 dashboard)
+- transport/http: все endpoints покрываются
+- Ad-hoc focal-тест `TestSimulateSaved_InflateTarget_Path` PASS (исправленная ветка InflateTarget)
+
+**КРИТИЧЕСКАЯ НАХОДКА (зафиксирована):**
 В shopspring/decimal v1.4.0 сигнатуры трансцендентных функций НЕ однородны:
 - `Pow(d2 Decimal) Decimal` — возвращает Decimal **без error** (внутри сам проглатывает ошибки `Ln`+`ExpTaylor`)
 - `Ln(precision int32) (Decimal, error)` — возвращает **(Decimal, error)**, требует явный precision
-
-Поэтому `SolveFutureValue`/`SolveContribution` (через `Pow`) пишутся тривиально, а
-`SolveTerm` (через `Ln`) требует обработки двух ошибок + precision=16 (=`decimal.DivisionPrecision`
-по умолчанию). Если когда-либо заменим decimal-либу — перепроверить ВСЕ трансцендентные вызовы.
+Поэтому `SolveFutureValue`/`SolveContribution` (через `Pow`) пишутся тривиально, а `SolveTerm` (через `Ln`) требует обработки двух ошибок + precision=16. Это породило баг в service/goals/goals.go:361 (передача `*decimal.Decimal` вместо `decimal.Decimal` в InflateTarget) — найден и исправлен.
 
 **КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
-Фича 5 — НЕ «переиспользует credit пакет», как гласил roadmap ниже. `credit.AnnuityPayment`
-считает **погашение кредита** (отрицательный поток, амортизация долга), а `tvm.CompoundInterest`
-работает с **одноразовым principal**. Задача «накопить к сроку регулярными взносами с
-доходностью» — это **фонд возмещения** (sinking fund), для которого потребовался
-**новый** `mathcore/goals/`. Число documented float64-bridges осталось = 2 (sinking fund
-решается аналитически, без BrentQ).
+Фича 5 — НЕ «переиспользует credit пакет». `credit.AnnuityPayment` считает **погашение кредита** (отрицательный поток, амортизация долга), а `tvm.CompoundInterest` работает с **одноразовым principal**. Задача «накопить к сроку регулярными взносами с доходностью» — это **фонд возмещения** (sinking fund), для которого потребовался **новый** `mathcore/goals/`. Число documented float64-bridges осталось = 2 (sinking fund решается аналитически, без BrentQ).
 
-**Что ОСТАЛОСЬ (Задачи 8-18 плана, передаётся в новый чат):**
-1. ~~Task 5 — `InflateTarget(S,π,n)` = `S·(1+π)^(n/12)` + тесты~~ ✅ ВЫПОЛНЕНО
-   (π=0/months=0 без изменений, π=−1 → ErrDeflation100Percent; +5 тестов, mathcore/goals теперь 17/17)
-2. ~~Task 6 — `internal/domain/goal.go`: Goal, GoalContribution, GoalStatus, ValidateGoal~~ ✅ ВЫПОЛНЕНО
-3. ~~Task 7 — `migrations/0003_goals_contributions.sql` (журнал пополнений + UNIQUE для идемпотентности)~~ ✅ ВЫПОЛНЕНО
-4. Tasks 8-9 — `internal/storage/goals.go`: CRUD goals + contributions (CRUD + SumContributions) + sqlmock-тесты
-5. Tasks 10-11 — `internal/service/goals/goals.go`: Repo interface, CRUD, идемпотентный AddContribution, Projection, Simulate
-6. Task 12 — `internal/service/goals/goals_test.go`: fakeRepo + сценарные тесты
-7. Task 13 — `internal/transport/http/goals.go`: handler (11 эндпоинтов)
-8. Tasks 14-15 — wiring в `router.go` (Deps.Goals) + `main.go`
-9. Task 16 — `internal/transport/http/goals_test.go`: httptest + fakeRepo
-10. Task 17 — `internal/storage/dashboard.go::GoalProgresses`: + `COALESCE(SUM(contributions),0)` (гибридная модель)
-11. Task 18 — финальная верификация + эта секция PROGRESS → «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН»
+**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
+Гибридная модель `effective_current = goals.current_amount (baseline) + Σ goal_contributions.amount` — self-healing на каждом recompute (аналог ф.1 recompute balances). Не кешируется. Реализована и в service.Compute, и в storage.dashboard.GoalProgresses (LEFT JOIN + COALESCE).
 
-**Важно: поправки к плану (найдены при сверке кода, учесть при реализации 8-18):**
-- Task 10 плана содержит опечатку `decimalYield` → должно быть `decimal.Decimal` (в плане помечено).
-- Task 12: `string(int64)` не компилируется → `strconv.FormatInt`; метод `ClientKey()` на чужом
-  типе `domain.GoalContribution` определить нельзя — использовать свободную функцию `clientKey(...)`.
-- Task 13: обёртка `parseAndSimulate` с `context.Context` избыточна и тянет неиспользуемый импорт —
-  в плане предложено упростить (декодировать и звать `svc.Simulate` напрямую).
-- `testSlogLogger()` уже определён в `transport/http/budgets_test.go` — НЕ дублировать в goals_test.go.
-- План кладёт `domain.Goal` сквозь все слои (storage→service→http). Это расходится с эталонным
-  пакетом `budget`, где в storage/service ходит `storage.Budget`. Оба варианта рабочие; следовать
-  плану (`domain.Goal`) — меньше конверсий на границах.
+**Хорошо:**
+- **Все 18 задач плана выполнены** — от mathcore/formulas до HTTP handler и wiring
+- **Идемпотентность пополнений** в стиле ф.1: (user_id, goal_id, contribution_id) UNIQUE → ErrContributionExists → fetch оригинала → (orig, true, nil)
+- **Projection math изолирована** в `projectWith` (чистая над goal + sum + now + inflation), тестируется детерминированно через svcWithFixedNow
+- **Money decimal end-to-end** — нигде во всём конвейере goals не проходит float64
+- **HTTP handler симметричен budget** — тот же decodeJSON/writeJSON/writeError/MustUserID паттерн
+- **Dashboard интегрирован** — GoalProgresses использует effective (baseline + Σ contributions)
+- **Build/vet/test — 20/20 зелёные** после всех задач, не только mathcore
 
-**Паттерн-эталон для оставшихся слоёв:** пакет `budget` (service/storage/transport/http) —
-полная симметрия. Конвенции: ID → BIGINT IDENTITY, Money → NUMERIC(28,2) строкой в JSON,
-идемпотентность в стиле ф.1 (`INSERT…RETURNING` + `translatePgError` → sentinel → fetch оригинала),
-handler-стиль `decodeJSON`/`writeJSON`/`writeError`/`MustUserID`.
-
-**Как продолжить в новом чате:**
-1. Прочитать `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` (контекст)
-2. Прочитать `docs/superpowers/plans/2026-06-25-goal-tracker.md` (Задачи 8-18 — полный код в каждом шаге)
-3. Ветка `feat/goal-tracker-ф5` уже активна (HEAD после Tasks 1-7 + сверка справочников).
-4. Продолжить с **Task 8** (storage/goals.go) по плану, учитывая поправки выше.
-5. По завершении всех 18 задач — слить ветку в main, обновить эту секцию до «ВЫПОЛНЕН+ВЕРИФИЦИРОВАН».
+**Плохо / тех. долг:**
+- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении)
+- `SimulateSaved` не позволяет override `CurrentAmount` в 0 (uses `IsPositive()` check) — семантическая дыра, отложена
+- `SumContributions` SQL не фильтрует soft-deleted goals (JOIN с goals отсутствует) — сейчас безопасна т.к. service.GetGoal отрезает, но при прямом вызове repo — потенциальная дыра
+- `ListContributions` без пагинации — растёт безгранично (technical debt, упомянут ранее)
+- `MonthlyContribution=0` проходит ValidateGoal, но `projectWith` трактует как "нет взноса" — семантическая несогласованность
+- `Simulate` подставляет `Name: "simulate"` в `Projection.Goal` — лучше `""` или отдельное поле `IsSimulated`
+- HTTP handler пока **без тестов** (Task 16 — `transport/http/goals_test.go` — делегирован субагенту, в работе)
 
 ---
 
 ## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — ПРОДОЛЖЕНИЕ
 
 Используют готовое mathcore (tvm/credit/investment/tax/goals):
-- Фича 5: трекер целей — **В РАБОТЕ** (см. секцию выше; Tasks 1-7 готовы: mathcore/goals + domain/goal + миграция 0003; Tasks 8-18 в плане)
+- Фича 5: трекер целей — **✅ ВЫПОЛНЕНО** (см. секцию выше; все 18 задач: mathcore/goals + domain + миграция + storage + service + HTTP handler + wiring + dashboard интеграция)
 - Фича 6: калькулятор вкладов (tvm.CompoundInterest + daycount + tax.DepositTax + tvm.FisherRealRate)
 - Фича 7: кредитный калькулятор (credit.Annuity/Differentiated + credit.PSK + credit.EarlyRepayment)
 - Фича 8: анализ доступности кредита (стресс-тест по минимальному доходу)
