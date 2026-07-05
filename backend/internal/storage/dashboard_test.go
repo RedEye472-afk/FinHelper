@@ -123,9 +123,10 @@ func TestGoalProgresses_Success(t *testing.T) {
 	pool, mock := newMockPool(t)
 	ctx := context.Background()
 
-	rows := sqlmock.NewRows([]string{"id", "name", "target_amount", "current_amount", "progress"}).
+	// Hybrid model column names: effective_current (baseline + Σ contributions).
+	rows := sqlmock.NewRows([]string{"id", "name", "target_amount", "effective_current", "progress"}).
 		AddRow(int64(1), "Подушка", "300000.00", "150000.00", "0.5000000000000000")
-	mock.ExpectQuery(q(`SELECT .* FROM goals WHERE user_id`)).
+	mock.ExpectQuery(q(`SELECT .* FROM goals g LEFT JOIN goal_contributions`)).
 		WithArgs(int64(7)).
 		WillReturnRows(rows)
 
@@ -149,9 +150,9 @@ func TestGoalProgresses_ZeroTarget_NoDivision(t *testing.T) {
 	ctx := context.Background()
 
 	// target=0 → progress=0 (CASE guards against division by zero).
-	rows := sqlmock.NewRows([]string{"id", "name", "target_amount", "current_amount", "progress"}).
+	rows := sqlmock.NewRows([]string{"id", "name", "target_amount", "effective_current", "progress"}).
 		AddRow(int64(2), "Без суммы", "0", "0", "0")
-	mock.ExpectQuery(q(`SELECT .* FROM goals WHERE user_id`)).
+	mock.ExpectQuery(q(`SELECT .* FROM goals g LEFT JOIN goal_contributions`)).
 		WithArgs(int64(7)).
 		WillReturnRows(rows)
 

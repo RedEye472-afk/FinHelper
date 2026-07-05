@@ -147,14 +147,24 @@ type GoalProgress struct {
 
 // GoalProgresses returns the user's non-deleted goals with a computed progress
 // fraction. Progress > 1 means the goal is over-funded; the UI clamps the bar.
+//
+// Hybrid current-amount model (design spec §3.2): the effective amount saved
+// is goals.current_amount (baseline) + Σ goal_contributions.amount (ad-hoc
+// top-ups). A LEFT JOIN + COALESCE keeps goals without contributions in the
+// result set (their effective current equals the baseline). The progress
+// fraction is effective / target, zero-safe for target = 0.
 func (p *Pool) GoalProgresses(ctx context.Context, userID int64) ([]GoalProgress, error) {
 	const q = `
-		SELECT id, name, target_amount, current_amount,
-		       CASE WHEN target_amount = 0 THEN 0
-		            ELSE current_amount::NUMERIC / target_amount END
-		FROM goals
-		WHERE user_id = $1 AND deleted_at IS NULL
-		ORDER BY target_date NULLS LAST, id
+		SELECT g.id, g.name, g.target_amount,
+		       g.current_amount + COALESCE(SUM(gc.amount), 0) AS effective_current,
+		       CASE WHEN g.target_amount = 0 THEN 0
+		            ELSE (g.current_amount + COALESCE(SUM(gc.amount), 0))::NUMERIC
+		                 / g.target_amount END AS progress
+		FROM goals g
+		LEFT JOIN goal_contributions gc ON gc.goal_id = g.id AND gc.user_id = g.user_id
+		WHERE g.user_id = $1 AND g.deleted_at IS NULL
+		GROUP BY g.id, g.name, g.target_amount, g.current_amount, g.target_date
+		ORDER BY g.target_date NULLS LAST, g.id
 	`
 	rows, err := p.DB.QueryContext(ctx, q, userID)
 	if err != nil {
