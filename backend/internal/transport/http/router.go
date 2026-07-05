@@ -10,6 +10,7 @@ import (
 	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/internal/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/internal/service/goals"
 	"github.com/RedEye472-afk/FinHelper/internal/service/operations"
 	"github.com/RedEye472-afk/FinHelper/internal/storage"
 )
@@ -36,6 +37,9 @@ type Deps struct {
 	// Budget is the per-category limit service for ф.4. nil = skip mounting
 	// /budgets.
 	Budget *budget.Service
+	// Goals is the savings-goal tracker service for ф.5. nil = skip mounting
+	// /goals + /calc/goal.
+	Goals *goals.Service
 }
 
 // NewRouter mounts the public and authenticated route groups under /api/v1.
@@ -87,6 +91,9 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 			}
 			if deps.Budget != nil {
 				NewBudgetHandler(deps.Budget, deps.Logger).Register(r)
+			}
+			if deps.Goals != nil {
+				NewGoalsHandler(deps.Goals, deps.Logger).Register(r)
 			}
 
 			// Example placeholder so the group is non-empty and verified by
