@@ -1,5 +1,6 @@
 module github.com/RedEye472-afk/FinHelper/vercelapi
 
+// Build cache invalidation: 2026-07-08 fresh deploy
 go 1.26.4
 
 require (
