@@ -1,4 +1,10 @@
-package handler
+// Command vercel is the Vercel Serverless Function entry point for FinHelper.
+//
+// It builds a full chi router (same as cmd/server) and wraps it with the
+// Vercel Go Bridge for Lambda compatibility.
+//
+// Build via: go build -o ../../api/bootstrap ./cmd/vercel/
+package main
 
 import (
 	"context"
@@ -9,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/vercel/go-bridge/go/bridge"
 
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
 	"github.com/RedEye472-afk/FinHelper/internal/config"
@@ -36,7 +43,7 @@ func init() {
 	logger := applog.New(cfg.Log.Level, cfg.Log.Format)
 	ctx := context.Background()
 
-	// Build a default error handler for when DB is unavailable.
+	// Database (optional — without it we serve 503 degraded).
 	pool, dbErr := storage.Open(ctx, cfg.Database.URL)
 	if dbErr != nil {
 		log.Printf("vercel: db unavailable (serving 503): %v", dbErr)
@@ -77,18 +84,17 @@ func init() {
 		goalsSvc := goals.NewService(pool)
 		credSvc := credit.NewService()
 
-		h = buildAppRouter(cfg, logger, pool, issuer, authMW, mailer, rl,
+		h = buildRouter(cfg, logger, pool, issuer, authMW, mailer, rl,
 			opsSvc, catSvc, dashSvc, budSvc, goalsSvc, credSvc)
 	} else {
-		// Degraded mode — all routes return 503.
 		h = buildDegradedRouter()
 	}
 
 	log.Println("vercel: handler ready")
 }
 
-// buildAppRouter constructs the full chi router with all services.
-func buildAppRouter(
+// buildRouter constructs the full chi router with all services.
+func buildRouter(
 	cfg config.Config,
 	logger *slog.Logger,
 	pool *storage.Pool,
@@ -105,7 +111,7 @@ func buildAppRouter(
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{cfg.Email.FrontendURL},
+		AllowedOrigins:   cfg.HTTP.CORSAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Idempotency-Key"},
 		ExposedHeaders:   []string{"Link"},
@@ -164,4 +170,8 @@ func buildDegradedRouter() http.Handler {
 // Handler is the Vercel Serverless Function entry point.
 func Handler(w http.ResponseWriter, r *http.Request) {
 	h.ServeHTTP(w, r)
+}
+
+func main() {
+	bridge.Start(http.HandlerFunc(Handler))
 }

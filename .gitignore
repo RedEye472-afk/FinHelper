@@ -45,9 +45,12 @@ frontend/build/
 pgdata/
 postgres-data/
 
+# ===== Vercel build artifacts =====
+.vercel/
+api/bootstrap
+
 # ===== Misc =====
 __pycache__/
 *.pyc
 nul
 *.bak
-.vercel/
