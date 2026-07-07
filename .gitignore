@@ -46,4 +46,6 @@ pgdata/
 postgres-data/
 
 # ===== Misc =====
+__pycache__/
+*.pyc
 nul

@@ -1,0 +1,12 @@
+{
+  "name": "FinHelper — Финансовый навигатор",
+  "short_name": "FinHelper",
+  "description": "Персональный помощник для финансового анализа и планирования",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#10b981",
+  "theme_color": "#10b981",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

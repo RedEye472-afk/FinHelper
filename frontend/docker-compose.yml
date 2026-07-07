@@ -1,0 +1,12 @@
+services:
+  finhelper-frontend:
+    build: .
+    ports:
+      - "0.0.0.0:5173:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,8 +1,10 @@
 package http
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -90,6 +92,8 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 			if deps.Categorization != nil {
 				NewCategoriesHandler(deps.Pool, deps.Categorization, deps.Logger).Register(r)
 			}
+			// Accounts is always available (pool-only handler, no service dep).
+			NewAccountsHandler(deps.Pool, deps.Logger).Register(r)
 			if deps.Dashboard != nil {
 				NewDashboardHandler(deps.Dashboard, deps.Logger).Register(r)
 			}
@@ -103,17 +107,28 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 				NewCreditHandler(deps.Credit, deps.Logger).Register(r)
 			}
 
-			// Example placeholder so the group is non-empty and verified by
-			// integration tests. Returns the authenticated user_id.
+			// GET /me returns the authenticated user's profile.
 			r.Get("/me", func(w http.ResponseWriter, req *http.Request) {
-				uid, ok := MustUserID(req.Context())
+				ctx := req.Context()
+				uid, ok := MustUserID(ctx)
 				if !ok {
 					writeError(w, http.StatusUnauthorized, "auth.unauthorized", "no user in context")
 					return
 				}
+				user, err := deps.Pool.GetUserByID(ctx, uid)
+				if err != nil {
+					if errors.Is(err, storage.ErrUserNotFound) {
+						writeError(w, http.StatusNotFound, "me.not_found", "user not found")
+						return
+					}
+					deps.Logger.Error("me: lookup", "error", err.Error())
+					writeError(w, http.StatusInternalServerError, "internal", "")
+					return
+				}
 				writeJSON(w, http.StatusOK, map[string]any{
-					"user_id":   uid,
-					"user_hash": UserHashFrom(req.Context()),
+					"id":         user.ID,
+					"email":      user.Email,
+					"created_at": user.CreatedAt.Format(time.RFC3339),
 				})
 			})
 		})

@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
 	"github.com/RedEye472-afk/FinHelper/internal/config"
@@ -67,6 +68,18 @@ func run() error {
 
 	// ----- HTTP server -----
 	r := chi.NewRouter()
+
+	// CORS middleware — allows the frontend (default: http://localhost:5173) to
+	// call the API from a different origin.
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   cfg.HTTP.CORSAllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)

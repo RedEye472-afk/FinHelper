@@ -117,6 +117,52 @@ func (p *Pool) ListAccounts(ctx context.Context, userID int64) ([]Account, error
 	return out, rows.Err()
 }
 
+// UpdateAccount updates the account name and/or type. Returns the updated
+// account or ErrAccountNotFound.
+func (p *Pool) UpdateAccount(ctx context.Context, userID, id int64, name string, accType domain.AccountType) (Account, error) {
+	const q = `
+		UPDATE accounts
+		SET name = $1, account_type = $2, updated_at = now()
+		WHERE id = $3 AND user_id = $4 AND deleted_at IS NULL
+		RETURNING id, user_id, name, account_type, currency, balance, created_at, updated_at
+	`
+	var (
+		a          Account
+		balRaw     decimal.Decimal
+		accTypeStr string
+	)
+	err := p.DB.QueryRowContext(ctx, q, name, string(accType), id, userID).Scan(
+		&a.ID, &a.UserID, &a.Name, &accTypeStr, &a.Currency, &balRaw, &a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Account{}, ErrAccountNotFound
+		}
+		return Account{}, fmt.Errorf("storage: update account: %w", err)
+	}
+	a.Type = domain.AccountType(accTypeStr)
+	a.Balance = domain.FromDecimal(balRaw)
+	return a, nil
+}
+
+// DeleteAccount soft-deletes an account by setting deleted_at. Returns
+// ErrAccountNotFound if the account does not exist or is already deleted.
+func (p *Pool) DeleteAccount(ctx context.Context, userID, id int64) error {
+	const q = `UPDATE accounts SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`
+	res, err := p.DB.ExecContext(ctx, q, id, userID)
+	if err != nil {
+		return fmt.Errorf("storage: delete account: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("storage: delete account rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrAccountNotFound
+	}
+	return nil
+}
+
 // SetAccountBalance overwrites the cached balance. Used by the operations
 // service after recomputing balance from operation history — never by direct
 // caller action (BUSINESS_LOGIC.md: balance is derived, not user-input).
