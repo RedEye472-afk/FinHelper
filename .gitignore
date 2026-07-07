@@ -49,3 +49,5 @@ postgres-data/
 __pycache__/
 *.pyc
 nul
+*.bak
+.vercel/
