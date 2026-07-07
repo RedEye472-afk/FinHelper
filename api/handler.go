@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 	"log"
-	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -25,12 +25,23 @@ import (
 	transporthttp "github.com/RedEye472-afk/FinHelper/pkg/transport/http"
 )
 
-var h http.Handler
+var (
+	h    http.Handler
+	once sync.Once
+)
 
-func init() {
+func getHandler() http.Handler {
+	once.Do(func() {
+		h = initHandler()
+	})
+	return h
+}
+
+func initHandler() http.Handler {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("vercel: config load: %v", err)
+		log.Printf("vercel: config load error, degraded mode: %v", err)
+		return buildDegradedRouter("configuration error: " + err.Error())
 	}
 
 	logger := applog.New(cfg.Log.Level, cfg.Log.Format)
@@ -38,7 +49,8 @@ func init() {
 
 	pool, dbErr := storage.Open(ctx, cfg.Database.URL)
 	if dbErr != nil {
-		log.Printf("vercel: db unavailable (serving 503): %v", dbErr)
+		log.Printf("vercel: db unavailable (degraded mode): %v", dbErr)
+		return buildDegradedRouter("database unavailable: " + dbErr.Error())
 	}
 
 	issuer, err := auth.NewJWTIssuer(
@@ -46,7 +58,8 @@ func init() {
 		cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL,
 	)
 	if err != nil {
-		log.Fatalf("vercel: jwt issuer: %v", err)
+		log.Printf("vercel: jwt issuer error, degraded mode: %v", err)
+		return buildDegradedRouter("jwt issuer error: " + err.Error())
 	}
 
 	authMW := transporthttp.NewAuthMiddleware(issuer, logger)
@@ -66,39 +79,14 @@ func init() {
 
 	rl := ratelimit.New(logger)
 
-	if pool != nil {
-		opsSvc := operations.NewService(pool)
-		catSvc := categorization.NewService(pool)
-		opsSvc.SetCategorizer(catSvc)
-		dashSvc := dashboard.NewService(pool)
-		budSvc := budget.NewService(pool)
-		goalsSvc := goals.NewService(pool)
-		credSvc := credit.NewService()
+	opsSvc := operations.NewService(pool)
+	catSvc := categorization.NewService(pool)
+	opsSvc.SetCategorizer(catSvc)
+	dashSvc := dashboard.NewService(pool)
+	budSvc := budget.NewService(pool)
+	goalsSvc := goals.NewService(pool)
+	credSvc := credit.NewService()
 
-		h = buildRouter(cfg, logger, pool, issuer, authMW, mailer, rl,
-			opsSvc, catSvc, dashSvc, budSvc, goalsSvc, credSvc)
-	} else {
-		h = buildDegradedRouter()
-	}
-
-	log.Println("vercel: handler ready")
-}
-
-func buildRouter(
-	cfg config.Config,
-	logger *slog.Logger,
-	pool *storage.Pool,
-	issuer *auth.JWTIssuer,
-	authMW *transporthttp.AuthMiddleware,
-	mailer *email.Sender,
-	rl *ratelimit.Limiter,
-	opsSvc *operations.Service,
-	catSvc *categorization.Service,
-	dashSvc *dashboard.Service,
-	budSvc *budget.Service,
-	goalsSvc *goals.Service,
-	credSvc *credit.Service,
-) http.Handler {
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.HTTP.CORSAllowedOrigins,
@@ -129,10 +117,12 @@ func buildRouter(
 	}, authMW)
 
 	r.Mount("/", apiRouter)
+	log.Println("vercel: handler ready")
 	return r
 }
 
-func buildDegradedRouter() http.Handler {
+func buildDegradedRouter(reason string) http.Handler {
+	msg := `{"status":"degraded","note":"` + reason + `"}`
 	r := chi.NewRouter()
 	r.Use(chimw.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -143,20 +133,23 @@ func buildDegradedRouter() http.Handler {
 	}))
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"status":"degraded","note":"database unavailable"}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(msg))
 	})
 	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"unavailable","note":"database unavailable"}`))
+		w.Write([]byte(msg))
 	})
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"error":"db_unavailable","message":"Service unavailable — database not configured"}`))
+		w.Write([]byte(msg))
 	})
 	return r
 }
 
 // Handler is the Vercel Serverless Function entry point.
 func Handler(w http.ResponseWriter, r *http.Request) {
-	h.ServeHTTP(w, r)
+	getHandler().ServeHTTP(w, r)
 }
