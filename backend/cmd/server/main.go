@@ -21,7 +21,9 @@ import (
 
 	"github.com/RedEye472-afk/FinHelper/internal/auth"
 	"github.com/RedEye472-afk/FinHelper/internal/config"
+	"github.com/RedEye472-afk/FinHelper/internal/email"
 	applog "github.com/RedEye472-afk/FinHelper/internal/log"
+	"github.com/RedEye472-afk/FinHelper/internal/ratelimit"
 	"github.com/RedEye472-afk/FinHelper/internal/service/budget"
 	"github.com/RedEye472-afk/FinHelper/internal/service/credit"
 	"github.com/RedEye472-afk/FinHelper/internal/service/categorization"
@@ -116,6 +118,29 @@ func run() error {
 			return fmt.Errorf("jwt issuer: %w", err)
 		}
 		authMW := transporthttp.NewAuthMiddleware(issuer, logger)
+
+		// Email sender (optional — if no API keys configured, Mailer stays nil
+		// and email features are gracefully skipped).
+		var mailer *email.Sender
+		if cfg.Email.ResendAPIKey != "" || cfg.Email.SendGridAPIKey != "" || cfg.Email.BrevoAPIKey != "" {
+			mailer = email.NewSender(
+				logger,
+				cfg.Email.FromEmail,
+				cfg.Email.FromName,
+				cfg.Email.ResendAPIKey,
+				cfg.Email.SendGridAPIKey,
+				cfg.Email.BrevoAPIKey,
+				cfg.Email.BrevoSender,
+			)
+			applog.Info(ctx, logger, "email sender configured")
+		} else {
+			applog.Warn(ctx, logger, "no email api keys: verification/password reset disabled")
+		}
+
+		// Rate limiter (10 req/min per IP for auth endpoints).
+		rl := ratelimit.New(logger)
+		_ = rl // used by router
+
 		operationsSvc := operations.NewService(pool)
 		// Categorizer shares the pool; attaching it to the operations service
 		// turns on auto-categorization on create (BUSINESS_LOGIC ф.2).
@@ -136,12 +161,15 @@ func run() error {
 			Issuer:         issuer,
 			Salt:           cfg.UserHashSalt,
 			Logger:         logger,
+			Mailer:         mailer,
+			RateLimiter:    rl,
+			FrontendURL:    cfg.Email.FrontendURL,
 			Operations:     operationsSvc,
 			Categorization: categorizationSvc,
 			Dashboard:      dashboardSvc,
 			Budget:         budgetSvc,
-			Goals:           goalsSvc,
-			Credit:          creditSvc,
+			Goals:          goalsSvc,
+			Credit:         creditSvc,
 		}, authMW))
 		applog.Info(ctx, logger, "api mounted",
 			"access_ttl", cfg.JWT.AccessTTL.String(),

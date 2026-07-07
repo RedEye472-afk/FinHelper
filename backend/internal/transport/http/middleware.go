@@ -35,6 +35,9 @@ func UserHashFrom(ctx context.Context) string {
 // MustUserID is the convenience handlers reach for after AuthMiddleware.
 func MustUserID(ctx context.Context) (int64, bool) { return userIDFrom(ctx) }
 
+// MustUserHash returns the user_hash from context, or empty string if missing.
+func MustUserHash(ctx context.Context) string { return UserHashFrom(ctx) }
+
 // AuthMiddleware verifies the Bearer access token and stashes user_id +
 // user_hash in the request context. On failure it responds 401 and stops
 // the chain.

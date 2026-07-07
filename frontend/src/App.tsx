@@ -8,6 +8,9 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AppLayout } from './components/layout/AppLayout'
 import { LoginPage } from './pages/Login'
 import { RegisterPage } from './pages/Register'
+import { VerifyEmailPage } from './pages/VerifyEmail'
+import { ForgotPasswordPage } from './pages/ForgotPassword'
+import { ResetPasswordPage } from './pages/ResetPassword'
 import { DashboardPage } from './pages/DashboardPage'
 import { OperationsPage } from './pages/OperationsPage'
 import { OperationsNewPage } from './pages/OperationsNew'
@@ -45,6 +48,9 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
 
             <Route

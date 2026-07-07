@@ -20,9 +20,12 @@ export function RegisterPage() {
     if (password !== confirm) { setError('Пароли не совпадают'); return }
     if (password.length < 8) { setError('Пароль должен быть минимум 8 символов'); return }
     setSubmitting(true)
-    try { await register(email, password); navigate('/dashboard', { replace: true }) }
-    catch (err) { setError(err instanceof ApiRequestError ? err.message : 'Ошибка подключения к серверу') }
-    finally { setSubmitting(false) }
+    try {
+      await register(email, password)
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Ошибка подключения к серверу')
+    } finally { setSubmitting(false) }
   }
 
   return (

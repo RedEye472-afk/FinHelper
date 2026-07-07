@@ -16,9 +16,16 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(''); setSubmitting(true)
-    try { await login(email, password); navigate('/dashboard', { replace: true }) }
-    catch (err) { setError(err instanceof ApiRequestError ? err.message : 'Ошибка подключения к серверу') }
-    finally { setSubmitting(false) }
+    try {
+      const data = await login(email, password)
+      if (data.requires_verification) {
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true })
+        return
+      }
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Ошибка подключения к серверу')
+    } finally { setSubmitting(false) }
   }
 
   return (
@@ -61,9 +68,10 @@ export function LoginPage() {
           <button type="submit" disabled={submitting} className="btn btn-primary w-full py-3 text-base">
             {submitting ? <span className="flex items-center gap-2"><span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Вход...</span> : <span className="flex items-center gap-2 justify-center"><LogIn size={16} /> Войти</span>}
           </button>
-          <p className="text-sm text-center" style={{color: 'var(--text-secondary)'}}>
-            Нет аккаунта? <Link to="/register" className="font-medium" style={{color: 'var(--color-primary-400)'}}>Зарегистрироваться</Link>
-          </p>
+          <div className="flex justify-between text-sm" style={{color: 'var(--text-secondary)'}}>
+            <Link to="/forgot-password" className="font-medium" style={{color: 'var(--color-primary-400)'}}>Забыли пароль?</Link>
+            <span>Нет аккаунта? <Link to="/register" className="font-medium" style={{color: 'var(--color-primary-400)'}}>Регистрация</Link></span>
+          </div>
         </form>
       </div>
     </div>

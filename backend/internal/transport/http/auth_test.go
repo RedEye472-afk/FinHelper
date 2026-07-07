@@ -250,6 +250,9 @@ func TestLogin_ValidIssuesTokens(t *testing.T) {
 		WithArgs("user@example.com").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "user_hash", "created_at", "updated_at"}).
 			AddRow(int64(1), "user@example.com", realHash, "uhsh", time.Now(), time.Now()))
+	env.mock.ExpectQuery(regexp.QuoteMeta(`SELECT verified`)).
+		WithArgs(int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"verified"}).AddRow(true))
 	env.mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO refresh_tokens`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -316,7 +319,8 @@ func TestRegister_HappyPath(t *testing.T) {
 	env.mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET user_hash`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	env.mock.ExpectCommit()
-	env.mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO refresh_tokens`)).
+	// SetVerificationCode is called after commit.
+	env.mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET verification_code`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	resp, body := postJSON(t, env.server.URL+"/api/v1/auth/register", credentialRequest{
@@ -325,12 +329,23 @@ func TestRegister_HappyPath(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("register: status = %d, body = %s", resp.StatusCode, body)
 	}
-	var out tokenResponse
+	// Register now returns { message, user_id, user_hash } — not tokens.
+	var out struct {
+		Message  string `json:"message"`
+		UserID   int64  `json:"user_id"`
+		UserHash string `json:"user_hash"`
+	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.AccessToken == "" || out.RefreshToken == "" {
-		t.Error("expected both tokens")
+	if out.Message == "" {
+		t.Error("expected non-empty message")
+	}
+	if out.UserID == 0 {
+		t.Error("expected non-zero user_id")
+	}
+	if out.UserHash == "" {
+		t.Error("expected non-empty user_hash")
 	}
 }
 

@@ -3,7 +3,19 @@ import crypto from 'node:crypto'
 
 // ── In-memory data store ──
 
-type User = { id: string; email: string; created_at: string }
+type StoredUser = {
+  id: string
+  email: string
+  password_hash: string
+  user_hash: string
+  verified: boolean
+  verification_code: string | null
+  verification_expires: number | null // unix ms
+  password_reset_token: string | null
+  password_reset_expires: number | null
+  created_at: string
+}
+
 type Account = { id: number; name: string; account_type: string; currency: string; balance: string; created_at: string; updated_at?: string }
 type Operation = { id: number; calc_id: string; operation_type: string; amount: string; account_id: number; category_id?: number | null; counterparty?: string; description?: string; operation_date: string; is_planned: boolean; created_at: string; deleted_at?: string | null }
 type Category = { id: number; name: string; parent_id: number | null; is_system: boolean }
@@ -12,8 +24,20 @@ type Goal = { id: number; user_id: string; name: string; target_amount: string; 
 
 let nextId = 100
 const userId = 'demo-user-0001'
-const user: User = { id: userId, email: 'demo@finhelper.ru', created_at: '2026-01-01T00:00:00.000Z' }
-const users: Record<string, User> = { [userId]: user }
+const users: Record<string, StoredUser> = {
+  [userId]: {
+    id: userId,
+    email: 'demo@finhelper.ru',
+    password_hash: '$2b$10$dummyhashfordemouseraccount1234567890abc', // password = demo1234
+    user_hash: 'uh_demo0001',
+    verified: true,
+    verification_code: null,
+    verification_expires: null,
+    password_reset_token: null,
+    password_reset_expires: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+  },
+}
 const tokens: Record<string, { userId: string; refresh?: string }> = {}
 const accounts: Account[] = [
   { id: ++nextId, name: 'Основной счёт', account_type: 'bank', currency: 'RUB', balance: '150000.00', created_at: '2026-01-01T00:00:00Z' },
@@ -52,6 +76,15 @@ function makeTokens(uid: string) {
   tokens[refresh] = { userId: uid }
   return { access_token: access, refresh_token: refresh, token_type: 'bearer', expires_in: 900 }
 }
+
+function generate6DigitCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000))
+}
+
+function userHash(email: string): string {
+  return 'uh_' + crypto.createHash('sha256').update(email).digest('hex').slice(0, 12)
+}
+
 function getUserId(req: VercelRequest): string | null {
   const auth = req.headers['authorization']
   if (!auth) return null
@@ -59,12 +92,15 @@ function getUserId(req: VercelRequest): string | null {
   const t = tokens[token]
   return t ? t.userId : null
 }
+
 function makeList<T>(items: T[]): { items: T[]; more: boolean } {
   return { items, more: false }
 }
+
 function catName(id: number): string {
   return categories.find(c => c.id === id)?.name ?? 'Unknown'
 }
+
 function categoryExpenses(catId: number): string {
   const total = operations
     .filter(o => o.category_id === catId && o.operation_type === 'expense' && !o.deleted_at)
@@ -85,18 +121,145 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Auth (no token required) ──
     if (path === '/api/v1/auth/register' && method === 'POST') {
       const body = req.body || {}
-      if (!body.email || !body.password) return res.status(400).json({ detail: 'email and password required' })
-      if (Object.values(users).find(u => u.email === body.email)) return res.status(409).json({ detail: 'User already exists' })
-      const newUser: User = { id: crypto.randomUUID(), email: body.email, created_at: new Date().toISOString() }
-      users[newUser.id] = newUser
-      return res.status(201).json(makeTokens(newUser.id))
+      const email: string = body.email || ''
+      const password: string = body.password || ''
+      if (!email || !password) return res.status(400).json({ detail: 'email and password required' })
+      if (password.length < 8) return res.status(400).json({ detail: 'Password must be at least 8 characters' })
+      if (Object.values(users).find(u => u.email === email)) return res.status(409).json({ detail: 'User already exists' })
+
+      const id = crypto.randomUUID()
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
+        .then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''))
+
+      const code = generate6DigitCode()
+      users[id] = {
+        id, email,
+        password_hash: '$2b$10$mock_' + hash.slice(0, 40),
+        user_hash: userHash(email),
+        verified: false,
+        verification_code: code,
+        verification_expires: Date.now() + 600_000,
+        password_reset_token: null,
+        password_reset_expires: null,
+        created_at: new Date().toISOString(),
+      }
+
+      // In production, this email would be actually sent
+      console.log(`[MOCK] Verification code for ${email}: ${code}`)
+
+      return res.status(201).json({
+        message: 'Verification code sent to email',
+        user_id: id,
+        user_hash: users[id].user_hash,
+      })
     }
+
     if (path === '/api/v1/auth/login' && method === 'POST') {
       const body = req.body || {}
-      const found = Object.values(users).find(u => u.email === body.email)
+      const email: string = body.email || ''
+      const password: string = body.password || ''
+      const found = Object.values(users).find(u => u.email === email)
       if (!found) return res.status(401).json({ detail: 'Invalid credentials' })
+
+      // Demo user special case — skip actual password verification
+      if (email === 'demo@finhelper.ru' && found.verified) {
+        return res.status(200).json(makeTokens(found.id))
+      }
+
+      // Mock password check (not real bcrypt)
+      if (!found.password_hash.startsWith('$2b$10$mock_')) {
+        return res.status(401).json({ detail: 'Invalid credentials' })
+      }
+
+      if (!found.verified) {
+        // Send new code
+        const code = generate6DigitCode()
+        found.verification_code = code
+        found.verification_expires = Date.now() + 600_000
+        console.log(`[MOCK] Verification code for ${email}: ${code}`)
+        return res.status(200).json({
+          requires_verification: true,
+          email: found.email,
+          message: 'Email not verified. Verification code sent.',
+        })
+      }
+
       return res.status(200).json(makeTokens(found.id))
     }
+
+    if (path === '/api/v1/auth/verify-email' && method === 'POST') {
+      // PUBLIC endpoint — find user by verification_code, not by auth header.
+      const body = req.body || {}
+      const code: string = String(body.code || '').trim()
+      if (!code) return res.status(400).json({ detail: 'code is required' })
+
+      const userEntry = Object.entries(users).find(([, u]) =>
+        u.verification_code === code && u.verification_expires !== null && Date.now() < u.verification_expires
+      )
+      if (!userEntry) return res.status(400).json({ detail: 'Invalid or expired verification code' })
+
+      const [uid, user] = userEntry
+      user.verified = true
+      user.verification_code = null
+      user.verification_expires = null
+
+      return res.status(200).json(makeTokens(uid))
+    }
+
+    if (path === '/api/v1/auth/send-code' && method === 'POST') {
+      const body = req.body || {}
+      const email: string = body.email || ''
+      const found = Object.values(users).find(u => u.email === email)
+      if (!found) return res.status(200).json({ message: 'If this email exists, a verification code was sent.' })
+      if (found.verified) return res.status(200).json({ message: 'Email already verified.' })
+
+      const code = generate6DigitCode()
+      found.verification_code = code
+      found.verification_expires = Date.now() + 600_000
+      console.log(`[MOCK] Verification code for ${email}: ${code}`)
+
+      return res.status(200).json({ message: 'Verification code sent' })
+    }
+
+    if (path === '/api/v1/auth/forgot-password' && method === 'POST') {
+      const body = req.body || {}
+      const email: string = body.email || ''
+      const found = Object.values(users).find(u => u.email === email)
+      if (found) {
+        const token = crypto.randomUUID()
+        found.password_reset_token = token
+        found.password_reset_expires = Date.now() + 3_600_000 // 1 hour
+        console.log(`[MOCK] Password reset link for ${email}: /reset-password?token=${token}&email=${encodeURIComponent(email)}`)
+      }
+      // Always return 200 — don't reveal if email exists
+      return res.status(200).json({ message: 'If this email exists, a recovery link was sent.' })
+    }
+
+    if (path === '/api/v1/auth/reset-password' && method === 'POST') {
+      const body = req.body || {}
+      const email: string = body.email || ''
+      const token: string = body.token || ''
+      const password: string = body.password || ''
+      if (!email || !token || !password) return res.status(400).json({ detail: 'email, token, and password required' })
+      if (password.length < 8) return res.status(400).json({ detail: 'Password must be at least 8 characters' })
+
+      const found = Object.values(users).find(u => u.email === email)
+      if (!found || !found.password_reset_token || !found.password_reset_expires) {
+        return res.status(400).json({ detail: 'Invalid or expired reset link' })
+      }
+      if (found.password_reset_token !== token) return res.status(400).json({ detail: 'Invalid or expired reset link' })
+      if (Date.now() > found.password_reset_expires) return res.status(400).json({ detail: 'Reset link expired' })
+
+      // Reset password (mock)
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
+        .then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''))
+      found.password_hash = '$2b$10$mock_' + hash.slice(0, 40)
+      found.password_reset_token = null
+      found.password_reset_expires = null
+
+      return res.status(200).json({ message: 'Password has been reset successfully.' })
+    }
+
     if (path === '/api/v1/auth/refresh' && method === 'POST') {
       const body = req.body || {}
       if (!body.refresh_token) return res.status(400).json({ detail: 'refresh_token required' })
@@ -110,7 +273,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uid = getUserId(req)
     if (!uid || !users[uid]) return res.status(401).json({ detail: 'Unauthorized' })
 
-    if (path === '/api/v1/me' && method === 'GET') return res.status(200).json(users[uid])
+    if (path === '/api/v1/me' && method === 'GET') {
+      const u = users[uid]
+      // Return public-facing user info only (no sensitive fields)
+      return res.status(200).json({
+        id: u.id,
+        email: u.email,
+        user_hash: u.user_hash,
+        created_at: u.created_at,
+      })
+    }
 
     // ── Dashboard ──
     if (path === '/api/v1/dashboard' && method === 'GET') {

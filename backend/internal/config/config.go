@@ -13,24 +13,26 @@ import (
 
 // Config is the parsed application configuration.
 type Config struct {
-	Database        DatabaseConfig
-	HTTP            HTTPConfig
-	JWT             JWTConfig
-	UserHashSalt    string
-	Log             LogConfig
+	Database     DatabaseConfig
+	HTTP         HTTPConfig
+	JWT          JWTConfig
+	UserHashSalt string
+	Log          LogConfig
+	Email        EmailConfig
 }
 
+// DatabaseConfig holds the Postgres connection string.
 type DatabaseConfig struct {
-	// URL is the full Postgres connection string, e.g.
-	// postgres://user:pass@host:5432/db?sslmode=disable
 	URL string
 }
 
+// HTTPConfig holds server address and CORS settings.
 type HTTPConfig struct {
 	Addr               string
 	CORSAllowedOrigins []string
 }
 
+// JWTConfig holds secrets and TTL for access/refresh tokens.
 type JWTConfig struct {
 	AccessSecret  string
 	RefreshSecret string
@@ -38,9 +40,21 @@ type JWTConfig struct {
 	RefreshTTL    time.Duration
 }
 
+// LogConfig controls logging verbosity and output format.
 type LogConfig struct {
 	Level  string
 	Format string
+}
+
+// EmailConfig holds multi-provider email API keys.
+type EmailConfig struct {
+	FromEmail      string
+	FromName       string
+	ResendAPIKey   string
+	SendGridAPIKey string
+	BrevoAPIKey    string
+	BrevoSender    string
+	FrontendURL    string
 }
 
 // Load reads configuration from environment variables.
@@ -49,6 +63,7 @@ func Load() (Config, error) {
 	var cfg Config
 	var problems []string
 	var ok bool
+	var key string
 
 	// ----- Database -----
 	// DATABASE_URL is optional at config-load time so the binary can boot
@@ -61,13 +76,15 @@ func Load() (Config, error) {
 	cfg.HTTP.CORSAllowedOrigins = splitCSV(getenvDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173"))
 
 	// ----- JWT -----
-	cfg.JWT.AccessSecret = os.Getenv("JWT_ACCESS_SECRET")
+	key = "JWT_ACCESS_SECRET"
+	cfg.JWT.AccessSecret = os.Getenv(key)
 	if len(cfg.JWT.AccessSecret) < 32 {
-		problems = append(problems, "JWT_ACCESS_SECRET must be at least 32 characters")
+		problems = append(problems, key+" must be at least 32 characters")
 	}
-	cfg.JWT.RefreshSecret = os.Getenv("JWT_REFRESH_SECRET")
+	key = "JWT_REFRESH_SECRET"
+	cfg.JWT.RefreshSecret = os.Getenv(key)
 	if len(cfg.JWT.RefreshSecret) < 32 {
-		problems = append(problems, "JWT_REFRESH_SECRET must be at least 32 characters")
+		problems = append(problems, key+" must be at least 32 characters")
 	}
 	cfg.JWT.AccessTTL, ok = getenvDuration("JWT_ACCESS_TTL", 15*time.Minute)
 	if !ok {
@@ -87,6 +104,15 @@ func Load() (Config, error) {
 	// ----- Logging -----
 	cfg.Log.Level = strings.ToLower(getenvDefault("LOG_LEVEL", "info"))
 	cfg.Log.Format = strings.ToLower(getenvDefault("LOG_FORMAT", "console"))
+
+	// ----- Email -----
+	cfg.Email.FromEmail = getenvDefault("FROM_EMAIL", "onboarding@resend.dev")
+	cfg.Email.FromName = getenvDefault("FROM_NAME", "FinHelper")
+	cfg.Email.ResendAPIKey = os.Getenv("RESEND_API_KEY")
+	cfg.Email.SendGridAPIKey = os.Getenv("SENDGRID_API_KEY")
+	cfg.Email.BrevoAPIKey = os.Getenv("BREVO_API_KEY")
+	cfg.Email.BrevoSender = os.Getenv("BREVO_SENDER_EMAIL")
+	cfg.Email.FrontendURL = getenvDefault("FRONTEND_URL", "")
 
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("invalid configuration:\n  - %s", strings.Join(problems, "\n  - "))

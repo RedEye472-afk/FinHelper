@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getAccessToken, clearTokens } from '../api/client'
 import * as authApi from '../api/auth'
 import type { User } from '../types'
@@ -6,8 +7,10 @@ import type { User } from '../types'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  /** Login returns the raw response so components can detect requiresVerification. */
+  login: (email: string, password: string) => Promise<import('../api/auth').LoginResponse>
+  register: (email: string, password: string) => Promise<{ message: string; user_id: number; user_hash: string }>
+  verifyEmail: (code: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -38,12 +41,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => { refreshUser() }, [refreshUser])
 
   const login = useCallback(async (email: string, password: string) => {
-    const u = await authApi.login(email, password)
-    setUser(u)
+    const data = await authApi.login(email, password)
+    // If verified, tokens are already saved and we fetch the user profile.
+    if (!data.requires_verification) {
+      const u = await authApi.getMe()
+      setUser(u)
+    }
+    return data
   }, [])
 
   const register = useCallback(async (email: string, password: string) => {
-    const u = await authApi.register(email, password)
+    const data = await authApi.register(email, password)
+    return data
+  }, [])
+
+  const verifyEmail = useCallback(async (code: string) => {
+    await authApi.verifyEmail(code)
+    const u = await authApi.getMe()
     setUser(u)
   }, [])
 
@@ -53,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

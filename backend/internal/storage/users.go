@@ -139,6 +139,149 @@ func (p *Pool) ConsumeRefreshToken(ctx context.Context, tokenHash string) (userI
 	return userID, nil
 }
 
+// SetVerificationCode stores a 6-digit verification code with a 10-minute
+// expiry for the given user. Returns ErrUserNotFound if the user does not exist.
+func (p *Pool) SetVerificationCode(ctx context.Context, userID int64, code string, expiresAt time.Time) error {
+	const q = `UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3`
+	res, err := p.DB.ExecContext(ctx, q, code, expiresAt.UTC(), userID)
+	if err != nil {
+		return fmt.Errorf("storage: set verification code: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// VerifyEmail checks the 6-digit code for a user. If the code matches and is
+// not expired, sets verified = TRUE and clears the code fields.
+// Returns ErrUserNotFound if no user with that id exists, or an error message
+// if the code is wrong/expired.
+func (p *Pool) VerifyEmail(ctx context.Context, userID int64, code string) error {
+	const q = `SELECT verification_code, verification_expires FROM users WHERE id = $1`
+	var storedCode *string
+	var expiresAt *time.Time
+	if err := p.DB.QueryRowContext(ctx, q, userID).Scan(&storedCode, &expiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("storage: verify email lookup: %w", err)
+	}
+	if storedCode == nil || *storedCode == "" {
+		return fmt.Errorf("no verification code set")
+	}
+	if *storedCode != code {
+		return fmt.Errorf("invalid verification code")
+	}
+	if expiresAt == nil || time.Now().After(*expiresAt) {
+		return fmt.Errorf("verification code expired")
+	}
+	const updateQ = `UPDATE users SET verified = TRUE, verification_code = NULL, verification_expires = NULL WHERE id = $1`
+	_, err := p.DB.ExecContext(ctx, updateQ, userID)
+	if err != nil {
+		return fmt.Errorf("storage: verify email update: %w", err)
+	}
+	return nil
+}
+
+// FindUserByVerificationCode finds a user by their 6-digit verification code.
+// Returns the user if found AND the code has not expired. Returns ErrUserNotFound
+// if no matching unexpired code exists.
+// This is used for the public verify-email endpoint (no auth required).
+func (p *Pool) FindUserByVerificationCode(ctx context.Context, code string) (User, error) {
+	const q = `
+		SELECT id, email, password_hash, user_hash, created_at, updated_at
+		FROM users
+		WHERE verification_code = $1
+		  AND verification_expires > NOW()
+	`
+	var u User
+	err := p.DB.QueryRowContext(ctx, q, code).Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.UserHash, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrUserNotFound
+		}
+		return User{}, fmt.Errorf("storage: find user by verification code: %w", err)
+	}
+	return u, nil
+}
+
+// MarkUserVerified sets verified=true and clears verification_code/expires for the given user.
+func (p *Pool) MarkUserVerified(ctx context.Context, userID int64) error {
+	const q = `UPDATE users SET verified = TRUE, verification_code = NULL, verification_expires = NULL WHERE id = $1`
+	res, err := p.DB.ExecContext(ctx, q, userID)
+	if err != nil {
+		return fmt.Errorf("storage: mark user verified: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// IsVerified returns whether a user has verified their email.
+func (p *Pool) IsVerified(ctx context.Context, userID int64) (bool, error) {
+	const q = `SELECT verified FROM users WHERE id = $1`
+	var verified bool
+	err := p.DB.QueryRowContext(ctx, q, userID).Scan(&verified)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrUserNotFound
+		}
+		return false, fmt.Errorf("storage: is verified: %w", err)
+	}
+	return verified, nil
+}
+
+// SetPasswordResetToken stores a UUID token (SHA-256 hashed by caller) for
+// password reset, valid for 1 hour.
+func (p *Pool) SetPasswordResetToken(ctx context.Context, email, tokenHash string, expiresAt time.Time) error {
+	const q = `UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE email = $3`
+	res, err := p.DB.ExecContext(ctx, q, tokenHash, expiresAt.UTC(), email)
+	if err != nil {
+		return fmt.Errorf("storage: set password reset token: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// ConsumePasswordResetToken checks the token for a user. If valid, atomically
+// updates the password and clears the token fields. Returns ErrUserNotFound
+// if the email does not exist, or an error if the token is wrong/expired.
+func (p *Pool) ConsumePasswordResetToken(ctx context.Context, email, tokenHash, newPasswordHash string) error {
+	const q = `SELECT password_reset_token, password_reset_expires FROM users WHERE email = $1`
+	var storedToken *string
+	var expiresAt *time.Time
+	if err := p.DB.QueryRowContext(ctx, q, email).Scan(&storedToken, &expiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("storage: consume password reset lookup: %w", err)
+	}
+	if storedToken == nil || *storedToken == "" {
+		return fmt.Errorf("no password reset token set")
+	}
+	if *storedToken != tokenHash {
+		return fmt.Errorf("invalid password reset token")
+	}
+	if expiresAt == nil || time.Now().After(*expiresAt) {
+		return fmt.Errorf("password reset token expired")
+	}
+	const updateQ = `UPDATE users SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE email = $2`
+	_, err := p.DB.ExecContext(ctx, updateQ, newPasswordHash, email)
+	if err != nil {
+		return fmt.Errorf("storage: consume password reset update: %w", err)
+	}
+	return nil
+}
+
 // RevokeAllRefreshTokens marks every active refresh token for a user as
 // revoked. Called on logout-all and password change.
 func (p *Pool) RevokeAllRefreshTokens(ctx context.Context, userID int64) error {
