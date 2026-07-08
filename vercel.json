@@ -1,10 +1,4 @@
 {
-  "functions": {
-    "api/handler/**/*.go": {
-      "runtime": "go1.26.4",
-      "maxDuration": 10
-    }
-  },
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
