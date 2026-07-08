@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	applog "github.com/RedEye472-afk/FinHelper/pkg/log"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // AccountsHandler wires the accounts REST endpoints.

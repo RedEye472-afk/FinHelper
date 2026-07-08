@@ -1,9 +1,8 @@
 node_modules
+.git
 docs
 scripts
-.git
-.gitignore
-.env*
 *.md
 *.bak
-dist
+.env*
+.vercel

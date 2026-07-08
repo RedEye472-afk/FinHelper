@@ -17,8 +17,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // Repo is the storage contract the dashboard depends on. Satisfied by

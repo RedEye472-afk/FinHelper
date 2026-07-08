@@ -1,4 +1,4 @@
-module github.com/RedEye472-afk/FinHelper
+module github.com/RedEye472-afk/FinHelper/backend
 
 go 1.26.4
 

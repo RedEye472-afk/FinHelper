@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // Dashboard aggregates (BUSINESS_LOGIC.md ф.3). Each method is one SQL query

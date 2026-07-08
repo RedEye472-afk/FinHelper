@@ -19,9 +19,9 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/pii"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/pii"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // OperationRepo is the storage contract the service depends on. The concrete

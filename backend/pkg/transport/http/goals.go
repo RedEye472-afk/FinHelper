@@ -26,10 +26,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	applog "github.com/RedEye472-afk/FinHelper/pkg/log"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/goals"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // GoalsHandler wires the goals REST endpoints (BUSINESS_LOGIC.md ф.5).

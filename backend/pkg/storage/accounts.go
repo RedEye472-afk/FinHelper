@@ -9,7 +9,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // Account is the persisted account record (mirrors accounts table row).

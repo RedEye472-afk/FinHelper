@@ -8,8 +8,8 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // fakeRepo is an in-memory dashboard.Repo. It records the bounds it was called

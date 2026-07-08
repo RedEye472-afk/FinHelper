@@ -15,11 +15,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/auth"
-	"github.com/RedEye472-afk/FinHelper/pkg/email"
-	applog "github.com/RedEye472-afk/FinHelper/pkg/log"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/categorization"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/email"
+	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // AuthDeps bundles collaborators an AuthHandler needs.

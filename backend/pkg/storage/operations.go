@@ -10,7 +10,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // Operation is the persisted operation record. Mirrors domain.Operation but

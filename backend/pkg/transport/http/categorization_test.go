@@ -13,9 +13,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/auth"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/categorization"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // catTestEnv wires a real CategoriesHandler behind AuthMiddleware against a

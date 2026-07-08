@@ -9,8 +9,8 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // fakeRepo is an in-memory OperationRepo for service tests. It does NOT

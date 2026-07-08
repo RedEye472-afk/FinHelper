@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	applog "github.com/RedEye472-afk/FinHelper/pkg/log"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/operations"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // OperationsHandler wires the operations REST endpoints (BUSINESS_LOGIC.md ф.1).

@@ -25,7 +25,7 @@
 // directly. Storage is abstracted behind Repo so unit tests run without one.
 package categorization
 
-import "github.com/RedEye472-afk/FinHelper/pkg/domain"
+import "github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 
 // Confidence constants. These are probabilities, not monetary amounts, so a
 // decimal literal is overkill; we keep them as strings to match the storage

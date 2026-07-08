@@ -8,10 +8,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	applog "github.com/RedEye472-afk/FinHelper/pkg/log"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/budget"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/budget"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // BudgetHandler wires the budget REST endpoints (BUSINESS_LOGIC.md ф.4).

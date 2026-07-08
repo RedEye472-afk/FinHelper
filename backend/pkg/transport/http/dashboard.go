@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
 )
 
 // DashboardHandler wires the dashboard REST endpoint (BUSINESS_LOGIC.md ф.3).

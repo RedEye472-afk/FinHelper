@@ -1,20 +1,15 @@
-// Command vercel is the Vercel Serverless Function entry point for FinHelper.
-//
-// It builds a full chi router and wraps it with the Vercel Go Bridge
-// for Lambda compatibility.
-//
-// Build: go build -o ../../api/bootstrap ./cmd/vercel/
-package main
+package handler
 
 import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/chi/v5"
-	"github.com/vercel/go-bridge/go/bridge"
 
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/config"
@@ -26,19 +21,29 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/migrate"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 	transporthttp "github.com/RedEye472-afk/FinHelper/backend/pkg/transport/http"
 )
 
-var h http.Handler
+var (
+	h    http.Handler
+	once sync.Once
+)
 
-func init() {
+func getHandler() http.Handler {
+	once.Do(func() {
+		h = initHandler()
+	})
+	return h
+}
+
+func initHandler() http.Handler {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Printf("vercel: config load error, degraded: %v", err)
-		h = degradedHandler("config error: " + err.Error())
-		return
+		log.Printf("vercel: config load error, degraded mode: %v", err)
+		return buildDegradedRouter("configuration error: " + err.Error())
 	}
 
 	logger := applog.New(cfg.Log.Level, cfg.Log.Format)
@@ -46,19 +51,24 @@ func init() {
 
 	pool, dbErr := storage.Open(ctx, cfg.Database.URL)
 	if dbErr != nil {
-		log.Printf("vercel: db unavailable (degraded): %v", dbErr)
-		h = degradedHandler("db unavailable")
-		return
+		log.Printf("vercel: db unavailable (degraded mode): %v", dbErr)
+		return buildDegradedRouter("database unavailable: " + dbErr.Error())
 	}
+
+	// Apply schema migrations synchronously before starting services.
+	// If migrations fail or time out, the λ goes degraded.
+	migrateCtx, migrateCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer migrateCancel()
+	migrate.Run(migrateCtx, pool)
+	log.Println("migrations completed")
 
 	issuer, err := auth.NewJWTIssuer(
 		cfg.JWT.AccessSecret, cfg.JWT.RefreshSecret,
 		cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL,
 	)
 	if err != nil {
-		log.Printf("vercel: jwt issuer error, degraded: %v", err)
-		h = degradedHandler("jwt issuer error")
-		return
+		log.Printf("vercel: jwt issuer error, degraded mode: %v", err)
+		return buildDegradedRouter("jwt issuer error: " + err.Error())
 	}
 
 	authMW := transporthttp.NewAuthMiddleware(issuer, logger)
@@ -115,15 +125,31 @@ func init() {
 		Credit:         credSvc,
 	}, authMW)
 
+	// Diagnostics: trigger migrations manually
+	r.Get("/migrate", func(w http.ResponseWriter, r *http.Request) {
+		migrateCtx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+		migrate.Run(migrateCtx, pool)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","msg":"migrations applied"}`))
+	})
+
+	// Diagnostics: trigger migrations manually
+	r.Post("/api/v1/migrate", func(w http.ResponseWriter, r *http.Request) {
+		migrateCtx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+		migrate.Run(migrateCtx, pool)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","msg":"migrations applied"}`))
+	})
+
 	r.Mount("/", apiRouter)
-	h = r
+	log.Println("vercel: handler ready")
+	return r
 }
 
-func Handler(w http.ResponseWriter, r *http.Request) {
-	h.ServeHTTP(w, r)
-}
-
-func degradedHandler(reason string) http.Handler {
+func buildDegradedRouter(reason string) http.Handler {
+	msg := `{"status":"degraded","note":"` + reason + `"}`
 	r := chi.NewRouter()
 	r.Use(chimw.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -133,9 +159,13 @@ func degradedHandler(reason string) http.Handler {
 		AllowCredentials: false,
 	}))
 
-	msg := `{"status":"degraded","note":"` + reason + `"}`
-	r.Get("/v1/healthz", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(msg))
+	})
+	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte(msg))
 	})
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +176,7 @@ func degradedHandler(reason string) http.Handler {
 	return r
 }
 
-func main() {
-	bridge.Start(http.HandlerFunc(Handler))
+// Handler is the Vercel Serverless Function entry point.
+func Handler(w http.ResponseWriter, r *http.Request) {
+	getHandler().ServeHTTP(w, r)
 }

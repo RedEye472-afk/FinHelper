@@ -14,9 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/operations"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // opsTestEnv wires a real OperationsHandler with a fake repo, so we exercise

@@ -8,16 +8,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/auth"
-	"github.com/RedEye472-afk/FinHelper/pkg/email"
-	"github.com/RedEye472-afk/FinHelper/pkg/ratelimit"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/budget"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/categorization"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/credit"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/dashboard"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/goals"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/operations"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/email"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/ratelimit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/budget"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // Deps bundles everything the v1 API router needs.
@@ -59,6 +59,24 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Health-check endpoints (public, no auth).
+		r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+		r.Get("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+			if deps.Pool != nil {
+				if err := deps.Pool.DB.Ping(); err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					w.Write([]byte(`{"status":"not ready","reason":"db ping failed"}`))
+					return
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"ready"}`))
+		})
+
 		// Public auth routes — rate limited.
 		if deps.RateLimiter != nil {
 			r.Group(func(r chi.Router) {

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // CategorizationRule is a keyword → category mapping (BUSINESS_LOGIC ф.2,

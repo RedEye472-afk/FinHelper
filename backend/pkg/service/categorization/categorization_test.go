@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // fakeRepo is an in-memory categorization.Repo for service tests.

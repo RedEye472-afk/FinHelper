@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="emerald">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="FinHelper — приватный, локальный и математически строгий финансовый ассистент. Трекер доходов/расходов, целей, кредитов и инвестиций." />
+  <meta name="theme-color" content="#10b981" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta property="og:title" content="FinHelper — Финансовый навигатор" />
+  <meta property="og:description" content="Приватный, локальный и математически строгий финансовый ассистент." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://finhelper-frontend.vercel.app" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='6' y='24' font-size='20' font-weight='700' fill='white' font-family='Inter'%3EF%3C/text%3E%3C/svg%3E" />
+  <title>FinHelper — Финансовый навигатор</title>
+  <style>
+    /* ============= RESET & BASE ============= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    img { max-width: 100%; height: auto; display: block; }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    ul { list-style: none; padding: 0; }
+
+    /* ============= THEME SYSTEM ============= */
+    :root, [data-theme="emerald"] {
+      --color-primary-50: #ecfdf5; --color-primary-100: #d1fae5;
+      --color-primary-200: #a7f3d0; --color-primary-300: #6ee7b7;
+      --color-primary-400: #34d399; --color-primary-500: #10b981;
+      --color-primary-600: #059669; --color-primary-700: #047857;
+      --color-primary-800: #065f46; --color-primary-900: #064e3b;
+      --color-primary-950: #022c22;
+      --color-danger-500: #f43f5e;
+      --color-accent-400: #60a5fa; --color-accent-500: #3b82f6;
+      --color-accent-600: #2563eb;
+      --color-warning-400: #fbbf24; --color-warning-500: #f59e0b;
+      --bg-gradient: linear-gradient(135deg, #059669 0%, #10b981 40%, #34d399 100%);
+      --bg-gradient-reverse: linear-gradient(135deg, #34d399 0%, #10b981 60%, #059669 100%);
+      --bg-surface: #ffffff;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-elevated: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-tertiary: #94a3b8;
+      --border-default: #e2e8f0;
+      --border-subtle: #f1f5f9;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-elevated: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+      --shadow-glow: 0 0 20px rgba(16,185,129,0.15);
+      --glass-bg: rgba(255,255,255,0.6);
+      --glass-border: rgba(255,255,255,0.18);
+      --hero-circle-1: radial-gradient(circle at 20% 30%, rgba(52,211,153,0.25) 0%, transparent 60%);
+      --hero-circle-2: radial-gradient(circle at 80% 70%, rgba(16,185,129,0.15) 0%, transparent 50%);
+      --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16,185,129,0.12) 0%, transparent 60%);
+    }
+
+    [data-theme="blue"] {
+      --color-primary-50: #eff6ff; --color-primary-100: #dbeafe;
+      --color-primary-200: #bfdbfe; --color-primary-300: #93c5fd;
+      --color-primary-400: #60a5fa; --color-primary-500: #3b82f6;
+      --color-primary-600: #2563eb; --color-primary-700: #1d4ed8;
+      --color-primary-800: #1e40af; --color-primary-900: #1e3a8a;
+      --color-primary-950: #172554;
+      --bg-gradient: linear-gradient(135deg, #2563eb 0%, #3b82f6 40%, #60a5fa 100%);
+      --bg-gradient-reverse: linear-gradient(135deg, #60a5fa 0%, #3b82f6 60%, #2563eb 100%);
+      --bg-surface: #ffffff;
+      --bg-page: #f0f4f8;
+      --bg-card: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-tertiary: #94a3b8;
+      --border-default: #dbe4ee;
+      --border-subtle: #eaf1f8;
+      --shadow-glow: 0 0 20px rgba(37,99,235,0.15);
+      --glass-bg: rgba(255,255,255,0.6);
+      --hero-circle-1: radial-gradient(circle at 20% 30%, rgba(96,165,250,0.25) 0%, transparent 60%);
+      --hero-circle-2: radial-gradient(circle at 80% 70%, rgba(37,99,235,0.15) 0%, transparent 50%);
+      --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37,99,235,0.12) 0%, transparent 60%);
+    }
+
+    [data-theme="purple"] {
+      --color-primary-50: #f5f3ff; --color-primary-100: #ede9fe;
+      --color-primary-200: #ddd6fe; --color-primary-300: #c4b5fd;
+      --color-primary-400: #a78bfa; --color-primary-500: #8b5cf6;
+      --color-primary-600: #7c3aed; --color-primary-700: #6d28d9;
+      --color-primary-800: #5b21b6; --color-primary-900: #4c1d95;
+      --color-primary-950: #2e1065;
+      --bg-gradient: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 50%, #a78bfa 100%);
+      --bg-gradient-reverse: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #6d28d9 100%);
+      --bg-surface: #ffffff;
+      --bg-page: #f5f3ff;
+      --bg-card: #ffffff;
+      --text-primary: #1c1917;
+      --text-secondary: #57534e;
+      --text-tertiary: #a8a29e;
+      --border-default: #e7e5e4;
+      --border-subtle: #f5f5f4;
+      --shadow-glow: 0 0 20px rgba(124,58,237,0.12);
+      --glass-bg: rgba(255,255,255,0.65);
+      --hero-circle-1: radial-gradient(circle at 20% 30%, rgba(167,139,250,0.2) 0%, transparent 60%);
+      --hero-circle-2: radial-gradient(circle at 80% 70%, rgba(124,58,237,0.12) 0%, transparent 50%);
+      --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.12) 0%, transparent 60%);
+    }
+
+    [data-theme="dark"] {
+      --color-primary-50: #f5f3ff; --color-primary-100: #ede9fe;
+      --color-primary-200: #ddd6fe; --color-primary-300: #c4b5fd;
+      --color-primary-400: #a78bfa; --color-primary-500: #8b5cf6;
+      --color-primary-600: #7c3aed; --color-primary-700: #6d28d9;
+      --color-primary-800: #5b21b6; --color-primary-900: #4c1d95;
+      --color-primary-950: #2e1065;
+      --color-danger-500: #f43f5e;
+      --bg-gradient: linear-gradient(135deg, #6d28d9 0%, #7c3aed 40%, #a78bfa 100%);
+      --bg-gradient-reverse: linear-gradient(135deg, #a78bfa 0%, #7c3aed 40%, #6d28d9 100%);
+      --bg-surface: #1a1a20;
+      --bg-page: #0f0f12;
+      --bg-card: #1a1a20;
+      --bg-elevated: #22222a;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-tertiary: #64748b;
+      --border-default: #2a2a35;
+      --border-subtle: #20202a;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+      --shadow-elevated: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+      --shadow-glow: 0 0 20px rgba(139,92,246,0.25);
+      --glass-bg: rgba(26,26,32,0.8);
+      --glass-border: rgba(42,42,53,0.5);
+      --hero-circle-1: radial-gradient(circle at 20% 30%, rgba(167,139,250,0.18) 0%, transparent 60%);
+      --hero-circle-2: radial-gradient(circle at 80% 70%, rgba(124,58,237,0.12) 0%, transparent 50%);
+      --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.15) 0%, transparent 60%);
+    }
+
+    [data-theme="dark"] .theme-btn { color: #94a3b8; }
+    [data-theme="dark"] .theme-btn:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; }
+    [data-theme="dark"] .theme-btn.active { background: rgba(139,92,246,0.15); color: #a78bfa; }
+
+    /* ============= LAYOUT ============= */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .section { padding: 100px 0; }
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      background: var(--color-primary-50);
+      color: var(--color-primary-700);
+      margin-bottom: 20px;
+      letter-spacing: -0.01em;
+    }
+    .section-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.04em;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+    .section-subtitle {
+      font-size: 1.125rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 48px;
+      text-align: center;
+    }
+    .text-center { text-align: center; }
+
+    /* ============= NAV ============= */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-default);
+      transition: background 0.3s ease;
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+    }
+    .nav-logo-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--bg-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-link {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: color 0.2s;
+      position: relative;
+    }
+    .nav-link:hover { color: var(--text-primary); }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: var(--bg-gradient);
+      transition: width 0.3s;
+      border-radius: 1px;
+    }
+    .nav-link:hover::after { width: 100%; }
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+    .nav-mobile-toggle { display: none; flex-direction: column; gap: 5px; padding: 8px; cursor: pointer; }
+    .nav-mobile-toggle span {
+      width: 24px; height: 2px;
+      background: var(--text-primary);
+      border-radius: 2px;
+      transition: all 0.3s;
+    }
+    .nav-mobile-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+    .nav-mobile-toggle.active span:nth-child(2) { opacity: 0; }
+    .nav-mobile-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+    /* ============= BUTTONS ============= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      letter-spacing: -0.01em;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary {
+      background: var(--bg-gradient);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .btn-primary:hover {
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-default);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
+    }
+    .btn-secondary:hover {
+      border-color: var(--color-primary-300);
+      background: var(--color-primary-50);
+    }
+    .btn-ghost {
+      color: var(--text-secondary);
+      padding: 8px 16px;
+    }
+    .btn-ghost:hover {
+      background: var(--color-primary-50);
+      color: var(--color-primary-700);
+    }
+
+    /* ============= THEME SWITCHER ============= */
+    .theme-switcher {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-page);
+      padding: 3px;
+      border-radius: 10px;
+      border: 1px solid var(--border-default);
+    }
+    .theme-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      transition: all 0.2s;
+      color: var(--text-tertiary);
+    }
+    .theme-btn:hover { background: var(--color-primary-50); color: var(--color-primary-700); }
+    .theme-btn.active {
+      background: var(--color-primary-500);
+      color: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+
+    /* ============= HERO ============= */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      padding-top: 64px;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--hero-gradient);
+      pointer-events: none;
+    }
+    .hero-circle-1, .hero-circle-2 {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .hero-circle-1 {
+      width: 600px;
+      height: 600px;
+      top: -200px;
+      right: -200px;
+      background: var(--hero-circle-1);
+      filter: blur(80px);
+      opacity: 0.6;
+    }
+    .hero-circle-2 {
+      width: 400px;
+      height: 400px;
+      bottom: -100px;
+      left: -100px;
+      background: var(--hero-circle-2);
+      filter: blur(60px);
+      opacity: 0.5;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+      padding: 80px 0 60px;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--color-primary-50);
+      border: 1px solid var(--color-primary-200);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--color-primary-700);
+      margin-bottom: 32px;
+      animation: fade-up 0.6s ease-out;
+    }
+    .hero-badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-primary-500);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .hero-title {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 700;
+      line-height: 1.08;
+      letter-spacing: -0.05em;
+      color: var(--text-primary);
+      margin-bottom: 24px;
+      animation: fade-up 0.6s ease-out 0.1s both;
+    }
+    .hero-title .gradient-text {
+      background: var(--bg-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      line-height: 1.65;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 40px;
+      animation: fade-up 0.6s ease-out 0.2s both;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      animation: fade-up 0.6s ease-out 0.3s both;
+    }
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 64px;
+      animation: fade-up 0.6s ease-out 0.4s both;
+    }
+    .hero-stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+    }
+    .hero-stat-label {
+      font-size: 0.875rem;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    /* ============= FEATURES GRID ============= */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-default);
+      border-radius: 16px;
+      padding: 32px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--bg-gradient);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-elevated);
+      border-color: var(--color-primary-200);
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--color-primary-50);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 1.25rem;
+    }
+    .feature-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .feature-desc {
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    /* ============= CALCULATORS ============= */
+    .calc-showcase {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .calc-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-default);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .calc-card:hover {
+      box-shadow: var(--shadow-elevated);
+      transform: translateY(-2px);
+    }
+    .calc-card-body { padding: 28px; }
+    .calc-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .calc-card-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+    .calc-card-badge {
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--color-primary-50);
+      color: var(--color-primary-700);
+      letter-spacing: -0.01em;
+    }
+    .calc-card-result {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      background: var(--bg-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    .calc-card-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+    .calc-visual {
+      height: 4px;
+      background: var(--bg-page);
+      position: relative;
+      overflow: hidden;
+    }
+    .calc-visual-bar {
+      height: 100%;
+      background: var(--bg-gradient);
+      border-radius: 0 2px 2px 0;
+      transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ============= PRIVACY SECTION ============= */
+    .privacy-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .privacy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-default);
+      border-radius: 16px;
+      padding: 32px;
+      transition: all 0.3s;
+    }
+    .privacy-card:hover {
+      border-color: var(--color-primary-200);
+      box-shadow: var(--shadow-card);
+    }
+    .privacy-icon {
+      font-size: 1.75rem;
+      margin-bottom: 16px;
+    }
+    .privacy-title {
+      font-size: 1.0625rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .privacy-desc {
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    /* ============= MATH SECTION ============= */
+    .math-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .math-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-default);
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .math-card:hover {
+      border-color: var(--color-primary-200);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-elevated);
+    }
+    .math-formula {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--color-primary-600);
+      background: var(--color-primary-50);
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+    .math-name {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .math-source {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    /* ============= CTA ============= */
+    .cta-section {
+      background: var(--bg-gradient);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .cta-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      padding: 80px 0;
+    }
+    .cta-title {
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      margin-bottom: 16px;
+    }
+    .cta-sub {
+      font-size: 1.125rem;
+      opacity: 0.85;
+      max-width: 500px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 32px;
+      background: #fff;
+      color: var(--color-primary-700);
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transition: all 0.25s;
+    }
+    .cta-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+
+    /* ============= FOOTER ============= */
+    .footer {
+      border-top: 1px solid var(--border-default);
+      padding: 48px 0 32px;
+      background: var(--bg-surface);
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 40px;
+    }
+    .footer-brand-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+    .footer-col-title {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+      margin-bottom: 16px;
+    }
+    .footer-link {
+      display: block;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      transition: color 0.2s;
+    }
+    .footer-link:hover { color: var(--color-primary-600); }
+    .footer-bottom {
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8125rem;
+      color: var(--text-tertiary);
+    }
+
+    /* ============= ANIMATIONS ============= */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ============= GLASS CARD ============= */
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+    }
+
+    /* ============= RESPONSIVE ============= */
+    @media (max-width: 1024px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .math-grid { grid-template-columns: repeat(2, 1fr); }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 64px;
+        left: 0;
+        right: 0;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-default);
+        padding: 20px 24px;
+        gap: 16px;
+        box-shadow: var(--shadow-elevated);
+      }
+      .nav-mobile-toggle { display: flex; }
+      .section-title { font-size: 2rem; }
+      .hero-stats { gap: 24px; flex-wrap: wrap; }
+      .features-grid { grid-template-columns: 1fr; }
+      .calc-showcase { grid-template-columns: 1fr; }
+      .privacy-grid { grid-template-columns: 1fr; }
+      .math-grid { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+      .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+      .theme-switcher { display: none; }
+      .section { padding: 64px 0; }
+      .hero-content { padding: 60px 0 40px; }
+    }
+    @media (max-width: 480px) {
+      .hero-title { font-size: 2rem; }
+      .hero-sub { font-size: 1rem; }
+      .btn { padding: 10px 18px; font-size: 0.875rem; }
+      .container { padding: 0 16px; }
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav" role="navigation">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <span class="nav-logo-icon">F</span>
+      FinHelper
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="#features" class="nav-link">Возможности</a>
+      <a href="#calculators" class="nav-link">Калькуляторы</a>
+      <a href="#privacy" class="nav-link">Приватность</a>
+      <a href="#math" class="nav-link">Математика</a>
+      <a href="https://github.com/RedEye472-afk/FinHelper" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+    </div>
+    <div class="nav-actions">
+      <div class="theme-switcher" id="themeSwitcher">
+        <button class="theme-btn active" data-theme-val="emerald" title="Изумрудная">E</button>
+        <button class="theme-btn" data-theme-val="blue" title="Океан">B</button>
+        <button class="theme-btn" data-theme-val="purple" title="Лаванда">P</button>
+        <button class="theme-btn" data-theme-val="dark" title="Полночь">D</button>
+      </div>
+      <a href="https://finhelper-frontend.vercel.app/login" target="_blank" rel="noopener" class="btn btn-ghost">Войти</a>
+      <a href="https://finhelper-frontend.vercel.app/register" target="_blank" rel="noopener" class="btn btn-primary">Начать бесплатно</a>
+    </div>
+    <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Меню">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-circle-1"></div>
+  <div class="hero-circle-2"></div>
+  <div class="container hero-content">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      v2.0 — Полностью локальный финансовый помощник
+    </div>
+    <h1 class="hero-title">
+      Финансовый навигатор<br/>
+      <span class="gradient-text">с математической точностью</span>
+    </h1>
+    <p class="hero-sub">
+      Приватный трекер доходов и расходов, кредитный и депозитный калькуляторы,
+      инвестиционный аналитик, бюджет и цели — всё работает локально,
+      без отправки данных на сервер.
+    </p>
+    <div class="hero-actions">
+      <a href="https://finhelper-frontend.vercel.app/register" target="_blank" rel="noopener" class="btn btn-primary" style="font-size:1.0625rem;padding:12px 28px;">
+        Начать бесплатно
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+      <a href="#features" class="btn btn-secondary">
+        Как это работает
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div>
+        <div class="hero-stat-value">0 ₽</div>
+        <div class="hero-stat-label">На сервере</div>
+      </div>
+      <div>
+        <div class="hero-stat-value">100%</div>
+        <div class="hero-stat-label">Приватность</div>
+      </div>
+      <div>
+        <div class="hero-stat-value">±0</div>
+        <div class="hero-stat-label">Float-ошибок</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label">Возможности</div>
+      <h2 class="section-title">Всё для управления финансами</h2>
+      <p class="section-subtitle">FinHelper объединяет трекинг, планирование и аналитику в одном приватном приложении.</p>
+    </div>
+    <div class="features-grid" style="margin-top:48px;">
+      <div class="feature-card reveal">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">Дашборд</div>
+        <div class="feature-desc">Сводка доходов/расходов, баланс счетов, категоризация операций и проекция бюджета на одном экране.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">💳</div>
+        <div class="feature-title">Операции</div>
+        <div class="feature-desc">Доходы и расходы с идемпотентными ключами. Без дублей даже при сетевых сбоях. Категории с автоподстановкой.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">Финансовые цели</div>
+        <div class="feature-desc">Sinking Fund с учётом инфляции и доходности. What-if симуляции, проекции достижения цели, журнал пополнений.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🏦</div>
+        <div class="feature-title">Кредитный калькулятор</div>
+        <div class="feature-desc">Аннуитет и дифференцированные платежи. ПСК по ЦБ (номинальная ставка). Досрочные погашения. График платежей.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">💰</div>
+        <div class="feature-title">Депозитный калькулятор</div>
+        <div class="feature-desc">Простые и сложные проценты, капитализация, пополнения. Эффективная ставка с учётом налогов (НДФЛ по ступеням).</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">📈</div>
+        <div class="feature-title">Инвестиции</div>
+        <div class="feature-desc">NPV, IRR/XIRR, MIRR, PI. Анализ денежных потоков по методологии Копновой. Сравнение ипотеки vs аренды.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">Бюджеты</div>
+        <div class="feature-desc">Месячные и годовые бюджеты с rollover остатков. Проекции на основе фактических трат и план-факт анализ.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🧮</div>
+        <div class="feature-title">Калькуляторы</div>
+        <div class="feature-desc">Affordability (сколько можно взять), Mortgage vs Rent, налоги (НДФЛ, НПД, УСН), инфляционные поправки.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-title">Zero-Trust</div>
+        <div class="feature-desc">Все данные шифруются и хранятся локально. PII маскируется до логирования. Refresh rotation без хранения токенов.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CALCULATORS SHOWCASE ============ -->
+<section class="section" id="calculators" style="background:var(--bg-surface);">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label">Калькуляторы</div>
+      <h2 class="section-title">Точные расчёты по стандартам ЦБ</h2>
+      <p class="section-subtitle">Все формулы — из учебника Копновой и указаний ЦБ РФ. Прозрачность каждого шага.</p>
+    </div>
+    <div class="calc-showcase">
+      <div class="calc-card reveal">
+        <div class="calc-card-body">
+          <div class="calc-card-header">
+            <span class="calc-card-title">Кредитный калькулятор</span>
+            <span class="calc-card-badge">Аннуитет / Дифф.</span>
+          </div>
+          <div class="calc-card-result">от 18 579 ₽/мес</div>
+          <div class="calc-card-desc">1 млн ₽ на 5 лет при 12% годовых. ПСК = номинальная ставка (ЦБ 5750-У), НЕ эффективная.</div>
+        </div>
+        <div class="calc-visual"><div class="calc-visual-bar" style="width:72%;"></div></div>
+      </div>
+      <div class="calc-card reveal">
+        <div class="calc-card-body">
+          <div class="calc-card-header">
+            <span class="calc-card-title">Депозитный калькулятор</span>
+            <span class="calc-card-badge">Капитализация</span>
+          </div>
+          <div class="calc-card-result">1 276 282 ₽</div>
+          <div class="calc-card-desc">1 млн ₽ на 3 года под 15% с ежемесячной капитализацией. НДФЛ на проценты — по маржинальным ступеням.</div>
+        </div>
+        <div class="calc-visual"><div class="calc-visual-bar" style="width:88%;"></div></div>
+      </div>
+      <div class="calc-card reveal">
+        <div class="calc-card-body">
+          <div class="calc-card-header">
+            <span class="calc-card-title">Инвестиционный анализ</span>
+            <span class="calc-card-badge">XIRR / NPV / MIRR</span>
+          </div>
+          <div class="calc-card-result">XIRR = 14.8%</div>
+          <div class="calc-card-desc">Эффективная годовая доходность потока платежей. В отличие от ПСК — эффективная, а не номинальная.</div>
+        </div>
+        <div class="calc-visual"><div class="calc-visual-bar" style="width:65%;"></div></div>
+      </div>
+      <div class="calc-card reveal">
+        <div class="calc-card-body">
+          <div class="calc-card-header">
+            <span class="calc-card-title">Финансовые цели</span>
+            <span class="calc-card-badge">Sinking Fund</span>
+          </div>
+          <div class="calc-card-result">43 712 ₽/мес</div>
+          <div class="calc-card-desc">Накопить 3 млн ₽ за 5 лет с учётом инфляции 8% и доходности 12%. Аналитическое решение, без BrentQ.</div>
+        </div>
+        <div class="calc-visual"><div class="calc-visual-bar" style="width:60%;"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRIVACY ============ -->
+<section class="section" id="privacy">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label">Приватность</div>
+      <h2 class="section-title">Ваши данные — только у вас</h2>
+      <p class="section-subtitle">FinHelper спроектирован по принципу Privacy by Design в соответствии с 152-ФЗ.</p>
+    </div>
+    <div class="privacy-grid">
+      <div class="privacy-card reveal">
+        <div class="privacy-icon">🏠</div>
+        <div class="privacy-title">Полностью локальный</div>
+        <div class="privacy-desc">Никакие финансовые данные не покидают ваше устройство. Сервер нужен только для аутентификации. Можно запустить на своём Docker-хостинге.</div>
+      </div>
+      <div class="privacy-card reveal">
+        <div class="privacy-icon">🛡️</div>
+        <div class="privacy-title">PII-маскирование</div>
+        <div class="privacy-desc">Номера телефонов, email, паспортные данные, ФИО маскируются ещё до сохранения в БД. В логах — только user_hash.</div>
+      </div>
+      <div class="privacy-card reveal">
+        <div class="privacy-icon">🔑</div>
+        <div class="privacy-title">Refresh Rotation</div>
+        <div class="privacy-desc">Access token (15 мин) живёт только в памяти. Refresh token (30 дней) — httpOnly Secure cookie. В БД — только SHA-256 хеш.</div>
+      </div>
+      <div class="privacy-card reveal">
+        <div class="privacy-icon">📜</div>
+        <div class="privacy-title">Open Source</div>
+        <div class="privacy-desc">Исходный код полностью открыт. Вы можете проверить, что приложение действительно не отправляет данные вовне.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MATH ============ -->
+<section class="section" id="math" style="background:var(--bg-surface);">
+  <div class="container">
+    <div class="text-center">
+      <div class="section-label">Математическое ядро</div>
+      <h2 class="section-title">Точность на уровне банковского ПО</h2>
+      <p class="section-subtitle">Никаких float64 для денег. Используем shopspring/decimal с масштабом 2 и округлением ROUND_HALF_AWAY_FROM_ZERO.</p>
+    </div>
+    <div class="math-grid">
+      <div class="math-card reveal">
+        <div class="math-formula">FV = PV × (1 + i)ⁿ</div>
+        <div class="math-name">Сложные проценты</div>
+        <div class="math-source">Копнова Е.Д., гл. 2</div>
+      </div>
+      <div class="math-card reveal">
+        <div class="math-formula">A = S × i / (1 − (1 + i)⁻ⁿ)</div>
+        <div class="math-name">Аннуитет</div>
+        <div class="math-source">Копнова Е.Д., гл. 4</div>
+      </div>
+      <div class="math-card reveal">
+        <div class="math-formula">∑ Cₜ / (1 + IRR)ᵗ = 0</div>
+        <div class="math-name">IRR / XIRR</div>
+        <div class="math-source">Копнова Е.Д., гл. 6.2</div>
+      </div>
+      <div class="math-card reveal">
+        <div class="math-formula">NPV = ∑ Cₜ / (1 + r)ᵗ − I₀</div>
+        <div class="math-name">NPV (ЧПС)</div>
+        <div class="math-source">Копнова Е.Д., гл. 6.1</div>
+      </div>
+      <div class="math-card reveal">
+        <div class="math-formula">PMT = (FV − PV × qⁿ) × q / (1 − q)</div>
+        <div class="math-name">Sinking Fund</div>
+        <div class="math-source">Копнова Е.Д., гл. 4.3</div>
+      </div>
+      <div class="math-card reveal">
+        <div class="math-formula">НДФЛ = Σ(база_слота × ставка)</div>
+        <div class="math-name">НДФЛ (маржинально)</div>
+        <div class="math-source">ФЗ-257, 5 ступеней</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="cta-section">
+  <div class="container">
+    <div class="cta-content">
+      <h2 class="cta-title">Готовы взять финансы под контроль?</h2>
+      <p class="cta-sub">Приватно. Точное. Бесплатно. Начните прямо сейчас — без регистрации по email.</p>
+      <a href="https://finhelper-frontend.vercel.app/register" target="_blank" rel="noopener" class="cta-btn">
+        Начать бесплатно
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <a href="#" class="nav-logo" style="margin-bottom:8px;">
+          <span class="nav-logo-icon">F</span>
+          FinHelper
+        </a>
+        <div class="footer-brand-desc">
+          Приватный, локальный и математически строгий финансовый ассистент.
+          Трекер доходов/расходов, целей, кредитов и инвестиций.
+        </div>
+      </div>
+      <div>
+        <div class="footer-col-title">Продукт</div>
+        <a href="#features" class="footer-link">Возможности</a>
+        <a href="#calculators" class="footer-link">Калькуляторы</a>
+        <a href="#privacy" class="footer-link">Приватность</a>
+        <a href="#math" class="footer-link">Математика</a>
+      </div>
+      <div>
+        <div class="footer-col-title">Ресурсы</div>
+        <a href="https://github.com/RedEye472-afk/FinHelper" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+        <a href="https://finhelper-frontend.vercel.app" target="_blank" rel="noopener" class="footer-link">Приложение</a>
+        <a href="https://finhelper-frontend.vercel.app/login" target="_blank" rel="noopener" class="footer-link">Войти</a>
+      </div>
+      <div>
+        <div class="footer-col-title">Технологии</div>
+        <a href="#" class="footer-link">Go 1.26 + chi</a>
+        <a href="#" class="footer-link">React 19 + TypeScript</a>
+        <a href="#" class="footer-link">PostgreSQL 16 + NUMERIC</a>
+        <a href="#" class="footer-link">Tailwind CSS 4</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 FinHelper. Open source.</span>
+      <span>Сделано с ❤️ для точности и приватности</span>
+    </div>
+  </div>
+</section>
+
+<script>
+  // === Theme Switcher ===
+  const currentTheme = localStorage.getItem('finhelper-theme') || 'emerald';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.themeVal === currentTheme);
+    btn.addEventListener('click', () => {
+      const theme = btn.dataset.themeVal;
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('finhelper-theme', theme);
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.themeVal === theme));
+      const colors = { emerald: '#10b981', blue: '#3b82f6', purple: '#8b5cf6', dark: '#7c3aed' };
+      document.querySelector('meta[name="theme-color"]').content = colors[theme] || '#10b981';
+    });
+  });
+
+  // === Mobile Nav ===
+  const mobileToggle = document.getElementById('mobileToggle');
+  const navLinks = document.getElementById('navLinks');
+  mobileToggle.addEventListener('click', () => {
+    mobileToggle.classList.toggle('active');
+    navLinks.classList.toggle('open');
+  });
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      mobileToggle.classList.remove('active');
+      navLinks.classList.remove('open');
+    });
+  });
+
+  // === Scroll Reveal ===
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // === Smooth scroll ===
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', e => {
+      const target = document.querySelector(anchor.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+</script>
+</body>
+</html>

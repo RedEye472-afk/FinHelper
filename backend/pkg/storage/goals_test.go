@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // goalCols — column list returned by every SELECT / UPDATE...RETURNING on goals.

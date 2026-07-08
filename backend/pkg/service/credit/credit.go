@@ -28,7 +28,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/mathcore/credit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/mathcore/credit"
 )
 
 // Sentinel errors. The HTTP handler branches on errors.Is.

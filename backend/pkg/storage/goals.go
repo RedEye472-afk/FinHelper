@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // Sentinel errors for goals + contributions. Callers branch on errors.Is.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
 )
 
 // Budget is the persisted budget record (BUSINESS_LOGIC ф.4). Mirrors the

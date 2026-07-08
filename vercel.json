@@ -1,9 +1,8 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build && cd ../backend && go build -o ../api/bootstrap ./cmd/vercel/",
+  "buildCommand": "cd frontend && npm install && npm run build && cd ..",
   "outputDirectory": "frontend/dist",
   "framework": "vite",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "api/index.go" }
   ]
 }

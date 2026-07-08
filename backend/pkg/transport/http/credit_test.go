@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/service/credit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
 )
 
 // ---- test env ----

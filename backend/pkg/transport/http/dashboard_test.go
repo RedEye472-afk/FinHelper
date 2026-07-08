@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/auth"
-	"github.com/RedEye472-afk/FinHelper/pkg/domain"
-	"github.com/RedEye472-afk/FinHelper/pkg/service/dashboard"
-	"github.com/RedEye472-afk/FinHelper/pkg/storage"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/domain"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
 
 // dashFakeRepo is a tiny canned dashboard.Repo for the HTTP test. We only need

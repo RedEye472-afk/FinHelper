@@ -24,7 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/RedEye472-afk/FinHelper/pkg/service/credit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
 )
 
 // CreditHandler wires the stateless credit calculator (BUSINESS_LOGIC.md ф.7).
