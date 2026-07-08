@@ -25,6 +25,7 @@ import (
 	transporthttp "github.com/RedEye472-afk/FinHelper/pkg/transport/http"
 )
 
+// lazy init: handler builds once on first request
 var (
 	h    http.Handler
 	once sync.Once
@@ -35,6 +36,11 @@ func getHandler() http.Handler {
 		h = initHandler()
 	})
 	return h
+}
+
+// Handler is the Vercel Serverless Function entry point.
+func Handler(w http.ResponseWriter, r *http.Request) {
+	getHandler().ServeHTTP(w, r)
 }
 
 func initHandler() http.Handler {
@@ -147,9 +153,4 @@ func buildDegradedRouter(reason string) http.Handler {
 		w.Write([]byte(msg))
 	})
 	return r
-}
-
-// Handler is the Vercel Serverless Function entry point.
-func Handler(w http.ResponseWriter, r *http.Request) {
-	getHandler().ServeHTTP(w, r)
 }
