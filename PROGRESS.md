@@ -700,6 +700,49 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 
 ---
 
+---
+
+## ❌ Vercel Deploy — Go Serverless Function (ТЕКУЩИЙ РАЗБОР, 08.07)
+
+**Постановка:** Развернуть Go API (chi-router) на Vercel (`finhelper-frontend.vercel.app`)
+в виде Serverless Function с PostgreSQL (Neon).
+
+**Файлы (созданы в сессии 08.07):**
+- `backend/cmd/vercel/main.go` — entry point: `init()` + `bridge.Start(Handler)`.
+  Использует `github.com/vercel/go-bridge/go/bridge` для Lambda-совместимости.
+  Компилируется в `api/bootstrap` через buildCommand.
+- `vercel.json` — buildCommand компилирует Go + Vite; rewrites `/api/(.*)` → `/api`.
+
+**Что испробовано — 3 подхода:**
+
+| Подход | Структура | Результат |
+|---|---|---|
+| **A. Go auto-detect (flat)** | `api/handler.go` + `api/go.mod` (отдельный module) | Функция не маршрутизируется (404) |
+| **B. Go auto-detect (subdir)** | `api/handler/handler.go` + `api/go.mod` | Функция таймаутится (HTTP 000, 120s) |
+| **C. Bootstrap (explicit)** ← ТЕКУЩИЙ | `backend/cmd/vercel/main.go` + `bridge.Start()` | Функция λ api/index (5.23MB) — 404 |
+
+**Текущее состояние (проверено 08.07, 20:00 MSK):**
+- SPA (Vite) на корню работает (200)
+- **Все `/api/*` endpoints:** `404 page not found` (Vercel default) — Go функция не вызывается
+- Build output показывает `λ api/index (5.23MB) [iad1]`, Routes пустые
+- Build cache полностью сброшен (Vercel Dashboard — Redeploy without cache)
+
+**Выводы:**
+1. Vercel Go auto-detect (подходы A/B) нестабилен — либо 404, либо timeout
+2. Bootstrap-подход C (явный `bridge.Start()`) — единственный рабочий паттерн по документации
+3. **Коренная причина 404 не идентифицирована** — функция в билде, но не в routes
+4. Возможные причины: Vite framework preset подавляет Go-функцию, несостыковка rewrites,
+   особенность Vercel Go Runtime для Go 1.26.4
+
+**Pending для следующей сессии:**
+- Диагностировать `vercel dev` локально с production env vars
+- Проверить Function Logs в Vercel Dashboard
+- Альтернатива: переписать API как Node.js Serverless (`api/index.ts`)
+  с chi-эмуляцией (простые DB-запросы через pg)
+- Если отладка затянется: отдельный Cloudflare Workers API (Go via wasm или JS)
+
+---
+
 ## 🔧 Команды для восстановления контекста
 
 ```bash
