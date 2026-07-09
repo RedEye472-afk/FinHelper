@@ -1,934 +1,159 @@
-# 📋 PROGRESS.md — что сделано в проекте FinHelper
+# FinHelper — PROGRESS.md
 
-> Журнал состояния. Кратко: что готово, что плохо, что хорошо. Обновляется по
-> мере прохождения этапов. Восстанавливай контекст отсюда, если сессия прервалась.
-
-**Стек**: Go 1.26 + React 18/TS | PostgreSQL 16 | JWT auth | только RUB | без LLM (fallback-шаблоны)
-**План**: см. утверждение в чате — MVP = фичи 1-9 из BUSINESS_LOGIC.md
-**Окружение**: Windows, Go через `C:\Program Files\Go\bin\go.exe`, git bash как shell
-
----
-
-## ✅ Этап 0 — Корректировка документации (ВЫПОЛНЕН)
-
-**Файлы:** `FinHelper/MATH_FORMULAS.md`, `FinHelper/AI_GUARDRAILS.md`
-
-Что исправлено:
-1. **ПСК** (§2.3) — убрал неверную упрощённую формулу `(Σплатежей − P)/P × (12/n)`
-   и арифметическую ошибку «18.48%» (там было 9.24%). Заменил на численное решение
-   уравнения денежного потока по методике ЦБ (Указание 5750-У). Эталон: **~17.96%**.
-2. **Налог на вклады** (§5.4) — переписал под ФЗ-382 от 26.12.2023: ставка ЦБ на
-   1 января, а не «макс за год». Добавил пример 2026.
-3. **Golden-тест налога** (§6.4) — `key_rate_max` → `key_rate_jan1`.
-4. **AI валидатор чисел** (AI_GUARDRAILS §"Проверка 1") — починил сравнение: было
-   строковое (отвергало любой правильный ответ из-за `0.185` vs `18.5%`), стало
-   числовое с допуском + нормализация запятых/пробелов + производные (×100, целая часть).
-
-**Хорошо:** источники указаны (Копнова, ЦБ, ФЗ), формулы теперь методически корректны.
-**Плохо:** в исходных доках были арифметические ошибки в примерах — это критично
-для проекта, где точность = доверие. Все пересчитано вручную.
+> Compact status for AI handoff. **Стек:** Go 1.26 + React 18/TS | PostgreSQL 16 (Neon) | JWT auth | RUB only | `shopspring/decimal` (float64 запрещён) | Vercel λ + SPA
+>
+> **Репозиторий:** `https://github.com/RedEye472-afk/FinHelper` (origin=main)
+> **Production:** `https://finhelper-frontend.vercel.app`
+> **Окружение:** Windows, `C:\Program Files\Go\bin\go.exe`, Git Bash, Node v24.17.0, npm based, Vite, Vercel CLI v54.21.1
 
 ---
 
-## ✅ Задача 1 — Backend scaffold (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
+## 🏛 Ключевые архитектурные решения (ADRs)
 
-**Файлы созданы:**
-- `FinHelper/docker-compose.yml` — postgres:16-alpine, healthcheck, volume pgdata
-- `FinHelper/backend/.env.example` — все переменные с комментариями
-- `FinHelper/.gitignore` — Go/Node/secrets/IDE
-- `FinHelper/backend/go.mod` — module `github.com/RedEye472-afk/FinHelper`, Go 1.26.4
-- `FinHelper/backend/migrations/0001_init.sql` — полная схема:
-  users, refresh_tokens, accounts, categories, operations, goals, budgets
-  + ENUM-типы + триггер `touch_updated_at`
-- `FinHelper/backend/internal/config/config.go` — загрузка конфига из env
-- `FinHelper/backend/internal/config/config_test.go` — тесты валидации
-- `FinHelper/backend/internal/log/logger.go` — slog-обёртка с user_hash из ctx
-- `FinHelper/backend/internal/domain/money.go` — тип Money (decimal, scale=2)
-- `FinHelper/backend/internal/domain/money_test.go` — тесты точности (0.1+0.2=0.3!)
-- `FinHelper/backend/internal/domain/operation.go` — Operation + invariants
-- `FinHelper/backend/internal/storage/postgres.go` — пул соединений (database/sql + pgx)
-- `FinHelper/backend/cmd/server/main.go` — HTTP server с /healthz, /readyz, graceful shutdown
-
-**Зависимости:** chi v5.3.0, shopspring/decimal v1.4.0, pgx v5.10.0, stdlib.
-
-**Верификация (проверено 23.06):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK
-- `go test ./...` → все тесты зелёные (config + domain)
-- Smoke-тест: `/healthz` → 200 `{"status":"ok"}`; `/readyz` → 503 без БД ✓
-
-**Хорошо:**
-- Money на decimal с фиксированной scale=2 (соответствует NUMERIC(28,2) в БД)
-- Тест доказывает: 0.1 + 0.2 = 0.30, а не 0.30000000004 (главный принцип проекта)
-- Logger возвращает user_hash из ctx, а не email — приватность by design
-- Идемпотентность заложена: UNIQUE(user_id, calc_id) в operations
-- Сервер бьётся без БД — удобно для smoke-тестов и CI
-- Чёткое разделение пакетов: domain / config / log / storage / transport
-
-**Плохо / технический долг:**
-- `sqlc` пока не подключён (план Этапа 1), SQL пока в миграциях, queries в коде
-- Нет golang-migrate CLI — миграции применяются вручную через psql (нужно для Задачи 2)
-- В Windows go не в PATH, вызываю по полному пути `C:\Program Files\Go\bin\go.exe`
-- bash в Windows — это git bash, Windows-команды `set X=Y` не работают, нужно export
-- `.env.example` требует минимум 32-символьные секреты — генерация на пользователе
-- README.md ещё не написан (план Этапа 6)
+| # | Решение | Детали |
+|---|---------|--------|
+| 1 | **Деньги = только decimal** | `shopspring/decimal`, scale=2, `ROUND_HALF_AWAY_FROM_ZERO`. В JSON — строки. float64 запрещён. Domain: `domain.Money`. |
+| 2 | **PII-маскирование до persistence** | `pii.Mask()` вызывается строго в service/operations.Create. Ни storage, ни handler не маскируют сами. В логах только `user_hash`. |
+| 3 | **JWT: access в памяти, refresh rotation** | Access 15min (Zustand store), Refresh 30d (httpOnly Secure cookie). SHA-256 в БД. Single-use: `UPDATE...RETURNING`. |
+| 4 | **Идемпотентность** | `calc_id` → UNIQUE(user_id,calc_id) для операций; `contribution_id` → UNIQUE(user_id,goal_id,contribution_id) для целей. |
+| 5 | **Vercel Go λ** | `api/index.go` (package handler, `func Handler`). root `go.mod` с `replace backend => ./backend`. Chi-router, **не** bridge.Start(). |
+| 6 | **Embed.FS + Windows** | Всегда `path.Join` (forward-slash), не `filepath.Join` — иначе panic на Windows. |
+| 7 | **Миграции: синхронные 60s** | Асинхронные приводили к частичной схеме. `verifySchema` — log.Printf (не fatal). |
+| 8 | **ПСК ≠ XIRR** | ПСК (кредиты) = **номинальная** по ЦБ 5750-У. XIRR (инвестиции) = **эффективная** годовая доходность. |
+| 9 | **НДФЛ = marginal brackets** | 5 ступеней (13/15/18/20/22%), каждая к своему slice. Не «всё по верхней». |
+| 10 | **Goals hybrid model** | `effective_current = goals.current_amount (baseline) + Σ goal_contributions.amount`. |
+| 11 | **Float64 bridges** | Ровно 2: `credit.BrentQ` (ПСК) и `investment.XIRR`. Весь остальной код — строго decimal. |
 
 ---
 
-## ✅ Задача 2 — JWT auth (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
-
-**Цель:** `POST /api/v1/auth/{register,login,refresh}` + `GET /api/v1/me` + AuthMiddleware — достигнута.
-
-**Файлы созданы:**
-- `internal/auth/password.go` — bcrypt cost 12, policy ≥8 ≤72 символов (NIST 800-63B: длина без composition-rules), `ValidatePassword`/`HashPassword`/`CheckPassword`
-- `internal/auth/hash.go` — `UserHash = SHA-256(user_id || ":" || salt)` с сепаратором против prefix-collision, `HashToken` (для refresh-хранения), `HashEmail`, `FormatUserHashLogValue`
-- `internal/auth/jwt.go` — `JWTIssuer` с access/refresh на разных секретах; claims `{uid, uhsh, kind}`; HMAC-only keyfunc (защита от alg-confusion/`none`); kind check (defense-in-depth); `JWTVerifier` interface для middleware
-- `internal/storage/users.go` — `CreateUser`, `GetUserByEmail`, `GetUserByID`, `SaveRefreshToken`, `ConsumeRefreshToken` (atomic UPDATE…RETURNING — single-use rotation), `RevokeAllRefreshTokens`
-- `internal/storage/errors.go` — `translatePgError` (23505 → `ErrUserExists` по constraint-name)
-- `internal/transport/http/json.go` — `Problem` envelope, `writeJSON`/`writeError`
-- `internal/transport/http/email.go` — `validateEmail` на `mail.ParseAddress` (отвергает `Display <addr>`)
-- `internal/transport/http/auth.go` — `Register` (two-phase tx: INSERT placeholder → UPDATE user_hash по id), `Login` (идентичный 401 для not-found/wrong-pw — не oracle), `Refresh` (verify JWT → consume row → issue new pair)
-- `internal/transport/http/middleware.go` — `AuthMiddleware.Wrap` (Bearer → claims → ctx `user_id`/`user_hash` + `applog.WithUserHash`)
-- `internal/transport/http/router.go` — `NewRouter` монтирует `/api/v1/auth/*` (public) и authenticated group с `/me` placeholder
-- `cmd/server/main.go` — wiring: JWT issuer → router; auth-эндпоинты mount только если есть DB pool (graceful: без БД `/healthz` работает, `/api/v1` → 404)
-
-**Зависимости добавлены:** `golang-jwt/jwt/v5 v5.2.2`, `golang.org/x/crypto` (bcrypt), `github.com/DATA-DOG/go-sqlmock v1.5.2`. `golang-migrate` НЕ понадобился — миграции применяются через psql вручную (см. тех.долг).
-
-**Верификация (проверено 23.06):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK
-- `go test ./...` → все пакеты зелёные:
-  - `internal/auth`: password (roundtrip, salts, malformed), hash (детерминизм, salt, separator, panic на empty salt), jwt (kind-cross-use, wrong secret, expired, alg=none, garbage)
-  - `internal/storage`: users CRUD через sqlmock, 23505→ErrUserExists, ConsumeRefreshToken atomicity
-  - `internal/transport/http`: полный auth flow через httptest.Server + sqlmock (register 201/409/400, login 200/401, refresh rotate, /me 200/401, AuthMiddleware reject missing/garbage/refresh-as-access)
-- Binary smoke: `/healthz` → 200, `/readyz` → 503 без БД, `/api/v1/auth/*` не смонтированы без БД (404, не паника)
-
-**Что НЕ покрыто (требует окружения с Postgres):**
-- Полноценный E2E через реальную БД. В текущем окружении `docker`, `psql`, `pg_ctl` не найдены — Postgres поднять нельзя. Все SQL-запросы сверены со схемой `migrations/0001_init.sql` вручную. E2E прогон отложен до этапа, когда будет доступен docker-compose.
-
-**Хорошо:**
-- Refresh-токены single-use: `ConsumeRefreshToken` = atomic `UPDATE … WHERE revoked_at IS NULL AND expires_at > NOW() RETURNING user_id` — два параллельных refresh-запроса не смогут оба успеть
-- В БД хранится только `SHA-256(refresh_token)`, не сам токен — кража БД не даёт имперсонации
-- Access и refresh на разных секретах + kind claim = тройная защита от cross-use
-- Логи содержат только `user_hash`, никогда email (PRIVACY_RULES.md §1)
-- 401 идентичен для «нет такого email» и «неверный пароль» — не oracle
-- HMAC-pinned keyfunc защищает от классической атаки `alg: none`/RS256→HS256 confusion
-- `applog.WithUserHash` в middleware — каждое downstream-логирование автоматически несёт user_hash
-- Register использует транзакцию для two-phase insert (placeholder user_hash → реальный по id)
-
-**Плохо / технический долг:**
-- Нет rate-limiting на `/auth/login` (brute-force защита) — отложено в Задачу безопасности
-- Нет refresh-token reuse detection (при использовании отозванного токена должны ревёкнуть ВСЕ токены пользователя) — помечено в roadmap
-- `ConsumeRefreshToken` не различает «revoked» и «expired» в логах — оба дают одинаковый 401 (намеренно для безопасности, но усложняет detection)
-- E2E через реальный Postgres не прогнан (нет docker в окружении)
-- `/me` placeholder — заменить на реальный profile-handler когда появятся фичи
-- ip_hash / device fingerprinting для audit-log — не реализовано (в MVP scope не входит)
-
----
-
-## ✅ Задача 3 — DayCount + TVM (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
-
-**Цель:** `internal/mathcore/daycount/` + `internal/mathcore/tvm/` с golden-тестами — достигнута.
-
-**Подход:** диспатч двух parallel subagents (Explore) через скилл `dispatching-parallel-agents` для разведки: они подтвердили окружение, style-конвенции, и — главное — исправили критическую ошибку в моём ТЗ: `decimal.Pow` в shopspring v1.4.0 возвращает `Decimal`, **а не `(Decimal, error)`**, и **поддерживает дробные показатели** (через `Ln`+`ExpTaylor`). Это убрало необходимость в fallback'е на integer-only exponent. Финальную реализацию написал сам — agents оказались read-only.
-
-**Файлы созданы:**
-- `internal/mathcore/daycount/daycount.go` — `Convention` (`ACT365`, `Thirty360` ISDA, `ACTACT` ISMA), `YearFraction`, `DaysBetween`
-  - 30/360 ISDA с правилами D1=31→30, D2=31 && D1≥30 → 30
-  - ACT/ACT ISMA: разбиение периода по календарным годам, знаменатель 365/366 по году
-  - Все даты нормализуются через `utcMidnight` (иммунитет к DST)
-  - Sentinel errors: `ErrReversedPeriod`, `ErrUnknownConvention`
-- `internal/mathcore/daycount/daycount_test.go` — golden (ACT365 182/365, 30/360 60/360, ACTACT 182/366, year-boundary 78/365 + 79/366), edge-cases (same-day, reversed, unknown), 13 тестов
-- `internal/mathcore/tvm/tvm.go` — `SimpleInterest`, `CompoundInterest`, `EffectiveRate`, `FisherRealRate`
-  - Compound использует дробный `Pow` напрямую (по разведке agent'а)
-  - Защита от zero-value из `Pow` на undefined input (negative base + fractional exp)
-  - Sentinel errors: `ErrNegativeTime`, `ErrInvalidCompounding`, `ErrDeflation100Percent`
-- `internal/mathcore/tvm/tvm_test.go` — golden (Simple 105000 точный, Compound 110471.31, Compound fractional 0.5y ≈106152.02, Effective 0.104713, Fisher 0.018519), edge-cases (t=0, i=0, P=0, m≤0, t<0, π=-1, π>rate negative yield), 12 тестов
-
-**Верификация (23.06):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK
-- `go test ./...` → **все 8 пакетов зелёные** (config, domain, auth, storage, transport/http, daycount, tvm)
-- Все golden-эталоны из MATH_FORMULAS.md §1 и §4 проходят
-
-**Хорошо:**
-- Каждая функция имеет doc comment с формулой, источником (Копнова/Люу/ЦБ) и edge-cases — для кнопки «Показать формулу» в UI (CLAUDE.md принцип 3 «Прозрачность»)
-- Zero float64 — соответствует детерминизм-принципу проекта
-- TVM имеет fractional-years тест (0.5 года) —Compound работает для любых сроков вклада, не только целых лет
-- DayCount ACT/ACT корректно обрабатывает year-boundary (проверено 2023→2024)
-- Tolerance `1e-6` для non-terminating decimals; точные equal для terminating (Simple)
-
-**Плохо / технический долг:**
-- `decimal.Pow` на дробных показателях internally использует `Ln`+`ExpTaylor` — точность зависит от `decimal.DivisionPrecision` (по умолчанию 16). Для финансовых расчётов на длинных сроках (>10 лет) стоит явно повысить precision. Отложено до появления real-world тест-кейсов.
-- Нет ACT/30 (Eurobond), ACT/360, NL/365 — добавим при первом реальном использовании
-- Compound на negative rate + fractional exponent может вернуть zero value — сейчас это детектится и возвращается как error, но без различения причин
-
-**Решение от agents зафиксировано:** в `internal/mathcore/tvm/` CompoundInterest использует `base.Pow(exp)` напрямую (без integer-only fallback), т.к. shopspring v1.4.0 это поддерживает. Если когда-либо заменим decimal-либу — перепроверить.
-
----
-
-## ✅ Задача 4 — credit/annuity + PSK (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
-
-**Цель:** `internal/mathcore/credit/` с golden-тестами — достигнута.
-
-**Файлы созданы:**
-- `internal/mathcore/credit/doc.go` — package doc + sentinel errors (ErrInvalidTerm/Month/Principal, ErrNoSignChange, ErrInsufficientCashflows, ErrSolverFailed, ErrEarlyExceedsBalance, ErrInvalidEarlyAmount)
-- `internal/mathcore/credit/annuity.go` — `AnnuityPayment` (Копнова Гл. 4.2.1), fallback `P/n` при i=0; `AnnuitySchedule` (закрытие баланса в 0 за счёт absorb последней строки); `ScheduleRow`
-- `internal/mathcore/credit/differentiated.go` — `DifferentiatedPayment(P,i,n,k)` и `DifferentiatedSchedule` (Копнова Гл. 4.2.2)
-- `internal/mathcore/credit/solver.go` — **BrentQ** (Brent–Dekker, bisection+secant+IQI). Единственный documented float64 bridge в mathcore
-- `internal/mathcore/credit/psk.go` — `PSK` / `PSKWithPeriods` по методологии ЦБ 5750-У: уравнение `Σ CF_k / (1+i)^q_k = 0`, `q_k = (d_k − d_0) × ЧБП/365`, годовая = `i × ЧБП` (номинальная, не эффективная). `Cashflow`, `AnnuityCashflows`, монотонный bracket-search
-- `internal/mathcore/credit/early.go` — `EarlyRepayment` (2 режима: EarlyShortenTerm / EarlyLowerPayment), `reamortise`, `sumInterest`
-- `internal/mathcore/credit/credit_test.go` — 20 тестов: golden + edge-cases
-
-**Зависимости:** нет новых (shopspring/decimal уже в go.mod).
-
-**Верификация (23.06):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK
-- `go test ./...` → **все 9 пакетов зелёные** (+credit: 20 тестов)
-- Ключевые эталоны:
-  - Annuity 24m = 47073.4722232… → 47073.47 (HALF_EVEN) — сверка с Excel ПЛТ
-  - Differentiated month 1/2 = 51666.67 / 51250.00
-  - PSK no-fees = **0.1200 точно** (номинальная = headline rate, как и должно быть по ЦБ)
-  - PSK with insurance+fee = **0.1776** (17.76%)
-  - BrentQ √2, linear root, no-sign-change error path
-  - Early repayment: shorten-term (payment const, term↓), lower-payment (term const, payment↓), closes-loan, edge-cases
-
-**Хорошо:**
-- PSK реализован по строгой методологии ЦБ 5750-У, не через упрощённую формулу (Этап 0 фикс доведён до конца)
-- `PSK no-fees == 0.12` — главный sanity-check: кредит без доп. платежей имеет ПСК = номинальной ставке, как в рекламе банка. Эффективная ставка была бы 12.68% — это другая метрика
-- BrentQ sign-safe и bracket-preserving (корень всегда внутри брекета)
-- float64 bridge изолирован в solver.go + psk.go (solveIRR/npvPerPeriod); все денежные суммы идут через decimal, в float конвертируются только даты→q и финальная ставка→decimal
-- Аннуитетный график закрывается ровно в 0 за счёт absorb residual в последней строке
-- Edge-cases: zero-rate fallback, P=0, n=0, paidMonths out of range, early>balance, no-sign-change, <2 cashflows
-
-**Плохо / технический долг:**
-- Обнаружены и исправлены арифметические ошибки в MATH_FORMULAS.md §2.1/§2.3/§6.3 (аннуитет указан 47073.46 вместо 47073.47 → ПСК из doc 17.96% был несогласован; правильное значение 17.76%). Это та же категория багов, что в Этапе 0 — нужны актуальные эталонные калькуляторы при составлении docs
-- BrentQ пока не покрыт тестом на полиномиальные корни высокой степени — добавим при появлении XIRR (Этап 2 продолжение)
-- E2E через реальную БД по-прежнему отложен (нет docker в окружении)
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
-ПСК = **номинальная** годовая ставка `i × ЧБП` по Указанию ЦБ 5750-У, НЕ эффективная `(1+i)^ЧБП − 1`.
-Это позволяет потребителям сравнивать ПСК с рекламируемой номинальной ставкой напрямую.
-Когда будем делать investment/XIRR — там нужна **эффективная** доходность, это другой метод аннуализации.
-
----
-
-## ✅ Задача 5 — investment (NPV/XIRR/MIRR/DPP/PI) (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
-
-**Файлы созданы:**
-- `internal/mathcore/investment/doc.go` — package doc + sentinels (ErrInsufficientCashflows, ErrNoSignChange, ErrSolverFailed, ErrNoPositiveCF, ErrNoNegativeCF, ErrInvalidRate, ErrNeverPaidBack, ErrZeroInitialInvestment)
-- `internal/mathcore/investment/npv.go` — `NPV` (decimal), `Cashflow` type, `sortByDate`
-- `internal/mathcore/investment/xirr.go` — `XIRR` через `credit.BrentQ` (второй и последний documented float64 bridge). Effective annual yield `(1+r)^(days/365) − 1`
-- `internal/mathcore/investment/mirr.go` — `MIRR` (PV_neg / FV_pos)^(1/n) − 1, decimal
-- `internal/mathcore/investment/payback.go` — `DPP` (с интерполяцией) + `PI`
-- `internal/mathcore/investment/investment_test.go` — 15 тестов: golden + edge-cases
-
-**Верификация (23.06):** BUILD_OK / VET_OK / `go test ./internal/mathcore/investment/` → 15/15 зелёных
-
-**Ключевые эталоны** (с пересчётом — doc §3 содержал арифметические ошибки):
-- NPV (-100k, +30k/+40k/+50k, r=10%) = -2103.68 (unprofitable) — сходится с §3.1
-- XIRR (4 квартальных CF) = **0.40657** (~40.66%) — round-trip проверка: NPV@XIRR ≈ 0. Doc §3.2 указывал 12.34% — **невозможно** для CF где 120k дохода на 100k вложений за год
-- MIRR = **0.08631** (~8.63%) — кубический корень 1.28192 = 1.08631, не 1.08527 (doc §3.3)
-- DPP — не окупается за 3 года при r=10% (сходится с §3.4)
-- PI unprofitable = 0.97896 (< 1)
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
-XIRR = **эффективная** годовая доходность, в отличие от ПСК (номинальная по ЦБ).
-Не путать метрики при разработке фич 5-9 (Этап 4).
-
-**Хорошо:**
-- BrentQ переиспользован из credit без дубля
-- Все денежные суммы — decimal, в float конвертируются только даты→дни и финальный rate→decimal
-- DPP корректно обрабатывает immediate payback (t=0 → 0, не −1)
-
-**Плохо / тех. долг:**
-- `solveXIRR` дублирует логику bracket-search из `credit.solveIRR`. Когда появится 3-й потребитель — вынести в `mathcore/solver` подпакет
-- Doc §3 опять содержал неверные эталоны (XIRR 12.34%, MIRR 8.52%) — та же категория багов, что Этап 0 и Задача 4
-
----
-
-## ✅ Задача 6 — tax (NPD/USN/NDFL/deposit) (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН)
-
-**Файлы созданы:**
-- `configs/tax_rules_{2024,2025,2026}.yaml` — версионные правила (canon в backend/configs, копия embedded в tax/configs для `go:embed`)
-- `internal/mathcore/tax/tax.go` — package doc + sentinels + `Dec` (YAML-friendly decimal через строку, чтобы избежать float-потерь) + `Rules`/`NPDRules`/`USNRules`/`NDFLRules`
-- `internal/mathcore/tax/loader.go` — `LoadRules(year)` через `embed.FS`, `LoadRulesFromFS` (для тестов), `MustLoadRules`
-- `internal/mathcore/tax/parse.go` — YAML-парсер
-- `internal/mathcore/tax/deposit.go` — `DepositTax` (ФЗ-382) + `Threshold`
-- `internal/mathcore/tax/npd.go` — `NPD` + `NPDResult.ExceedsLimit` (сигнал переключения режима)
-- `internal/mathcore/tax/usn.go` — `USN` (2 режима: Income / IncomeMinusExpenses)
-- `internal/mathcore/tax/ndfl.go` — `NDFL` (прогрессивная шкала 13%/15%) + `ChildDeduction`
-- `internal/mathcore/tax/tax_test.go` — 16 тестов: golden + edge-cases
-
-**Зависимости:** `gopkg.in/yaml.v3 v3.0.1`
-
-**Верификация (23.06):** BUILD_OK / VET_OK / `go test ./internal/mathcore/tax/` → 16/16 зелёных
-
-**Ключевые эталоны (§5):**
-- DepositTax 2024: interest=200k, rate_jan1=0.16 → threshold 160k → tax=5200 ✓
-- DepositTax 2025: interest=300k, rate_jan1=0.21 → threshold 210k → tax=11700 ✓
-- NPD: 500k физлица + 300k бизнес = 20000 + 18000 = 38000 ✓
-- USN 15%: (2M − 1.2M) × 0.15 = 120000 ✓
-- NDFL прогрессивная: 7M = 5M×0.13 + 2M×0.15 = 950000 ✓
-- ChildDeduction: 1→1400, 2→2800, 3→5800, 4→8800
-
-**Хорошо:**
-- `Dec`-обёртка гарантирует, что YAML `"0.16"` парсится в decimal без float64-потери
-- `go:embed` — правила tamper-evident, изменение требует перекомпиляции (важно для фин. приложения)
-- `path.Join` (не `filepath.Join`) для embed.FS — forward-slash независимо от OS
-- Версионирование: 2024/2025/2026 отдельно, добавление нового года = новый файл + тест
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
-embed.FS **всегда** использует forward slashes, даже на Windows. `filepath.Join` даст `configs\…` → `fs.ReadFile` упадёт. Используем `path.Join`.
-
-**Плохо / тех. долг:**
-- Канон configs лежат и в `backend/configs/` и в `internal/mathcore/tax/configs/` (дублирование). Когда будет CI — сделать `backend/configs/` единственным источником и symlink/embed-директиву с относительным путём
-- Ставки ЦБ на 01.01.2026 взяты предположительно (21%) — сверить с cbr.ru перед релизом
-
----
-
-## ✅ ЭТАП 2 ЗАКРЫТ — мат. ядро полностью готово
-
-| Пакет | Файлов | Тестов | Статус |
-|---|---|---|---|
-| mathcore/daycount | 2 | 13 | ✅ (Задача 3) |
-| mathcore/tvm | 2 | 12 | ✅ (Задача 3) |
-| mathcore/credit | 6 | 20 | ✅ (Задача 4) |
-| mathcore/investment | 6 | 15 | ✅ (Задача 5) |
-| mathcore/tax | 8 | 16 | ✅ (Задача 6) |
-| **ИТОГО** | **24** | **76** | **build/vet/test зелёные** |
-
-Documented float64 bridges: ровно 2 (credit/BrentQ через PSK, переиспользован в XIRR) — как и требовал план. Всё остальное — строго decimal.
-
----
-
-## ✅ Сверка со справочными материалами (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 25.06)
-
-**Цель:** прогнать mathcore и налоговые конфиги против папки `справочные_материалы/`
-(Источники 1–6: Копнова, формулы-справочник, налоговые вычеты РФ 2025–2026) — достигнута.
-Принцип проекта «doc↔код не должен расходиться»: эталоны в коде — источник истины,
-документация правится под них.
-
-**Найденные расхождения (та же категория багов, что Этап 0 / Задачи 4–5):**
-
-1. **Ключевая ставка ЦБ на 01.01.2026** — критическая ошибка в `tax_rules_2026.yaml`:
-   было `21%` (предположительное значение), стало `16%` (фактическое — действовала
-   с 19.12.2025, следующее изменение 13.02.2026 до 15.5%). Источник:
-   `04_fin_formuly_i_raschety_spravochnik.md §9`, `05_nalogovye_vychety_rf_2025_2026.md §7`.
-   Ставки на 01.01.2024 (16%) и 01.01.2025 (21%) были корректны, не трогались.
-   → обновлены все 6 копий YAML (3 в `backend/configs/` + 3 в `internal/mathcore/tax/configs/`,
-     включая правку неверного комментария в 2024-конфиге, где тоже упоминалось «2026 = 21%»).
-
-2. **НДФЛ — прогрессивная шкала с 2025 (ФЗ-257 от 12.12.2024)** — устаревшая модель:
-   в коде была 2-ступенчатая (13%/15% свыше 5М), верная только для 2024. С 2025 — 5 ступеней:
-   13% до 2.4М / 15% до 5М / 18% до 20М / 20% до 50М / 22% свыше.
-   Источник: `05_nalogovye_vychety_rf_2025_2026.md §0, §8`.
-   → переработка:
-     - `tax.go::NDFLRules` — новый тип `Bracket` + поле `Brackets []Bracket`,
-       метод `NDFLBrackets()` (explicit brackets или fallback на legacy-поля);
-     - `ndfl.go::NDFL` — universal marginal-bracket движок (проходит по ступеням,
-       считает slice = min(remaining, width) × rate); добавлен sentinel
-       `ErrUnknownNDFLScale` для misconfigured года;
-     - конфиги 2025/2026 — 5 brackets; 2024 — и 2 brackets, и legacy-поля (обратная
-       совместимость со старым golden-тестом);
-     - `tax_test.go` — +7 тестов: 5-step на 7M (=1062000), 5-step top-bracket на
-       60M (=11602000), граница 1-й ступени 2026 (2.4M→312000), эквивалентность
-       2024 brackets↔legacy, NDFLBrackets sanity, deposit 2026 при ставке 16%
-       (interest 300000 → tax 18200, threshold 160000).
-   - **2024 намеренно оставлен 2-ступенчатым** — ФЗ-257 действует с доходов 2025.
-
-**Что проверено, расхождений НЕ найдено:**
-- `tvm/` — простой/сложный процент, эффективная ставка, Фишер = файл 4 §1, §7.1, Копнова Гл. 1.
-- `credit/` — аннуитет 47073.47 (Excel ПЛТ), ПСК по ЦБ 5750-У, дифференцированный = файл 4 §2.1/§3.5.
-- `investment/` — NPV -2103.68, XIRR (round-trip NPV@XIRR≈0), MIRR 0.08631=∛1.28192,
-  PI 0.97896 = файл 4 §4.1–4.5.
-- НПД, УСН, deposit-tax (для 2024/2025) = НК РФ Гл. 23/26.2, ФЗ-422, ФЗ-382.
-
-**Верификация (25.06):** `go build ./...` → BUILD_OK; `go vet ./...` → VET_OK;
-`go test ./...` → **все 20 пакетов зелёные** (tax теперь 20 тестов вместо 16).
-
-**Хорошо:**
-- Bracket-движок universal: добавление 6-й ступени в будущем = одна строка в YAML, код не меняется
-- Legacy-fallback сохраняет обратную совместимость — старые конфиги без `brackets` работают
-- Каждое изменение эталонов сверено с источником (ЦБ РФ / ФЗ-257), не выдумано
-- Принцип «doc↔код не расходятся» соблюдён: doc-значения в коде теперь = справочные материалы
-
-**Плохо / тех. долг:**
-- Дублирование `backend/configs/` и `internal/mathcore/tax/configs/` по-прежнему не устранено
-  (6 файлов вместо 3). Когда будет CI — сделать embed-директиву с относительным путём
-  к единственному канону в `backend/configs/`.
-- Ставки ЦБ в YAML по-прежнему «заморожены» на момент правки; для автoupdate нужен
-  адаптер к API ЦБ РФ (в scope MVP не входит).
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
-НДФЛ в `tax.NDFL()` считается **marginally** (каждая ступень применяется только к slice
-базы в её диапазоне), не «всё по ставке верхней ступени». Это соответствует НК РФ ст. 224.
-Старый 2-ступенчатый расчёт 2024 математически эквивалентен новому bracket-движку —
-сверено тестом `TestNDFL_2024_BracketsEquivalentToLegacy`.
-
----
-
-## ✅ Этап 3 / Фича 1 — Ручной ввод операций (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
-
-**Цель:** BUSINESS_LOGIC.md ф.1 — ручной ввод операций с идемпотентностью, PII-маскированием, детерминированным пересчётом балансов — достигнута.
-
-**Файлы созданы:**
-
-*Domain layer:*
-- `internal/domain/account.go` — `Account`, `AccountType` (cash/bank/savings/investment/crypto/debt), `Validate()`
-- `internal/domain/category.go` — `Category` (system/user, parent_id), `Validate()`
-- `internal/domain/money.go` — расширение: `FromDecimal`, `Abs`, `Neg`, `Equal`, `AddAll`. **Документация поправлена:** shopspring `Round(n)` = ROUND_HALF_AWAY_FROM_ZERO (1.005→1.01), НЕ HALF_EVEN как раньше утверждалось. Найденные неверные doc-комментарии в `money.go`/`money_test.go`/`credit/credit_test.go` исправлены (та же категория багов что в Этапе 0 — doc↔код рассинхрон).
-- `internal/domain/operation.go` — `Validate()` усилена: добавлена проверка валидности `OperationType` (раньше пропускала любое строковое значение — дыра, найденная service-тестом `unknown_type`)
-
-*PII masking (PRIVACY_RULES.md §"Маскирование PII"):*
-- `internal/pii/pii.go` — `Mask(s)` регекс-маскирование: [PHONE], [EMAIL], [PASSPORT], [CARD], [PERSON] (Cyrillic+Latin ALLCAPS), [MEDICAL], [LEGAL]. Идемпотентное (brackets ломают матчинг), консервативное (не трогает amounts/dates).
-  - **Критическая находка:** Go RE2 `\b` работает ТОЛЬКО с ASCII (`\w = [0-9A-Za-z_]`), рядом с кириллицей НЕ срабатывает. Для кириллических keyword-правил `\b` убран, для person-детекции переписан как «2+ ALLCAPS токенов через whitespace».
-- `internal/pii/pii_test.go` — 15 кейсов (включая idempotency, multiple-types-at-once, keeps-amounts)
-
-*Storage layer:*
-- `internal/storage/accounts.go` — `CreateAccount`, `GetAccount`, `ListAccounts`, `SetAccountBalance`; sentinels `ErrAccountExists`/`ErrAccountNotFound`
-- `internal/storage/categories.go` — CRUD + `SeedSystemCategories(tx, names)` (для онбординга)
-- `internal/storage/operations.go` — `CreateOperation`, `GetOperation`, `GetOperationByCalcID`, `ListOperations` (с пагинацией через `Page{Limit, BeforeID}` и фильтрами `OperationFilter{From,To,Types,AccID,CatID,Planned}`), `DeleteOperation` (soft), `UpdateOperationCategory`, `SumByAccountSince`. `scanOperation` общий scanner для Row+Rows.
-  - **Критический фикс бизнес-логики:** изначальный `SumByAccountSince` игнорировал переводы → балансы счетов не двигались при transfer/exchange. Переписан в один SQL с UNION ALL: source leg (-amount/+amount for income/expense; -amount for transfer/exchange) + destination leg (+amount_dst или +amount для transfer/exchange). Теперь переводы корректно двигают балансы (BUSINESS_LOGIC ф.1: «переводы НЕ в cashflow и налогах, **только в остатках счетов**»).
-- `internal/storage/accounts_test.go` + `operations_test.go` — 14 тестов через `sqlmock` (в стиле `users_test.go`)
-
-*Service layer:*
-- `internal/service/operations/operations.go` — `Service` с `OperationRepo` interface (тестируем без БД). Методы: `Create`, `Get`, `List` (с `more`-сигналом через fetch-limit+1), `Delete`, `SetCategory`. Оркестрация: validate → mask PII → owner-check accounts → insert → recompute balances. Idempotency: при `ErrOperationExists` возвращается оригинал через `GetOperationByCalcID`. `recomputeBalance` делает полный recompute (self-healing, no drift). `newCalcID = srv:{user_id}:{unix_nano}`.
-- `internal/service/operations/operations_test.go` — 9 тестов через in-memory `fakeRepo`: PII-masking, idempotency, invalid-input (3 кейса), unowned-account, transfer-recomputes-both-balances, list-more-flag, delete-recomputes-balance, delete-not-found
-
-*HTTP layer:*
-- `internal/transport/http/operations.go` — `OperationsHandler.Register(r)` монтирует `POST/GET /operations`, `GET/DELETE /operations/{id}`, `PATCH /operations/{id}/category`. `operationRequest`/`operationResponse` JSON-формы со строковыми деньгами (без float!), parse-хелперы `parseCreate`/`parseListQuery`. `writeServiceError` маппит sentinel'ы → 400/404/500.
-- `internal/transport/http/operations_test.go` — 9 интеграционных тестов через `httptest.Server` + chi router + in-memory `fakeOpsRepo` (Create success/invalid-type/invalid-amount, Get not-found, Create→Get roundtrip, List pagination, Delete, SetCategory, Unauthorized-without-context)
-
-*Wiring:*
-- `internal/transport/http/router.go` — `Deps.Operations *operations.Service`, монтируется в authenticated group если non-nil (graceful: без БД /operations не появляется)
-- `cmd/server/main.go` — `operations.NewService(pool)` подключается к Deps, `applog "api mounted"` (было `"auth endpoints mounted"`)
-
-**Зависимости:** НЕТ новых (chi, shopspring/decimal, sqlmock уже в go.mod).
-
-**Верификация (23.06):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK (включая проверку errors-before-use в тестах)
-- `go test ./...` → **все 14 пакетов зелёные** (+pii: 15, +domain: +5, +storage: +14, +service/operations: +9, +transport/http: +9)
-- Smoke-тест бинарника (без БД): `/healthz` → 200, `/readyz` → 503 `no_database`, `/api/v1/operations` → 404 (API не смонтирован без pool — корректное graceful-поведение)
-
-**Ключевые эталоны:**
-- PII: `"Перевод от ИВАН ИВАНОВИЧ И."` → `"Перевод от [PERSON]"`; `"Звонок +7 (999) 123-45-67"` → `"Звонок [PHONE]"` (проверено на service- и http-уровне)
-- Идемпотентность: повторный POST с тем же `calc_id` возвращает ту же операцию, не создаёт дубль и не падает
-- Round-trip: create → get-by-id → равенство всех полей включая PII-маскированный counterparty
-- Пагинация: 3 операции, limit=2 → 2 items + `more=true`
-
-**Хорошо:**
-- **PII маскирование до persistence** — приватность by design, не после (PRIVACY_RULES). Один и тот же `pii.Mask` используется в service — гарантия что ни один путь записи не обходит маскирование
-- **Идемпотентность на (user_id, calc_id)** с unique-constraint в БД + service-уровневой обработкой `ErrOperationExists` → fetch оригинала. Двойная защита: даже если два параллельных запроса придут с одним calc_id, БД-констрейнт пустит только один
-- **Пересчёт баланса как полный recompute**, а не delta-update → self-healing: любой drift от частичного отказа исправляется на следующей операции
-- **Storage-agnostic service** через `OperationRepo` interface → unit-тесты без БД, в стиле auth-слоя (`JWTVerifier`)
-- **Money как строка в JSON** — нигде не проходит через float64 (нулевой детерминизм-нарушений)
-- **Финансовая семантика transfer** наконец корректна: source -, destination +, cashflow/taxes не затронуты (соответствует ф.1 дословно)
-- **Graceful degradation**: без БД сервер бьётся, /healthz работает, /api/v1 не падает с паникой — важно для CI и smoke
-
-**Плохо / тех. долг:**
-- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении). Все SQL сверен со схемой `0001_init.sql` вручную + sqlmock покрывает контракты. Полноценный прогон — когда будет docker-compose
-- `currency_exchange` с разными валютами сейчас работает «по доверению»: amount_dst пишется как есть, конвертация по курсу ЦБ НЕ реализована (RUB-only scope-lock; когда добавим multi-currency — понадобится exchange-rates таблица)
-- Авто-категоризация (ф.2) ещё не подключена: `category_id` ставится вручную или None. База для неё (`categories`, `UpdateOperationCategory`) уже готова
-- `SeedSystemCategories` написан, но не вызывается из registration flow — нужно звать в `AuthHandler.Register` после создания user (добавим в ф.2 когда будут правила категорий)
-- Нет rate-limiting на /operations (как и на /auth) — отложено
-- Мой изначальный `SumByAccountSince` имел логическую дыру (переводы не двигали баланс); нашёл тестом СЕЙЧАС, а не на ревью. Мораль: SQL-агрегации по типам операций требуют явных тест-кейсов на каждый тип, не только income/expense
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
-PII-маскирование `pii.Mask` вызывается **только в service/operations.Create**, на входе в persistence. Ни storage, ни handlers не маскируют сами — единственная точка. Если появится ф.2 (авто-категоризация) или импорт CSV (Этап 6), они **обязаны** идти через тот же service-путь, иначе обойдут маскирование.
-
----
-
-## ✅ Этап 3 / Фича 2 — Авто-категоризация (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
-
-**Цель:** BUSINESS_LOGIC.md ф.2 — rules-based авто-категоризация (scope-lock: БЕЗ ML, БЕЗ банков/MCC) — достигнута.
-
-**Файлы созданы:**
-- `migrations/0002_categorization.sql` — `categorization_rules` (keyword→category, system/user, priority, soft-delete) + `counterparty_overrides` (exact counterparty→category с confirmation-счётчиком, UNIQUE user+counterparty)
-- `internal/domain/categorization.go` — `RuleSource`, `RolloverPolicy` (none/unlimited/months_3), `LearnThreshold=3`, `MinCategorizationConfidence=0.70`, `NormalizeCounterparty` (lower+trim)
-- `internal/storage/categorization.go` — CRUD rules + overrides; `UpsertOverrideConfirmation` (atomic INSERT…ON CONFLICT DO UPDATE +1); `SeedDefaultsForUser` (resolve имён категорий→id + seed keyword rules в tx регистрации)
-- `internal/storage/scanners.go` — `decimalScanner` (sql.Scanner для NUMERIC→decimal, БЕЗ float64)
-- `internal/service/categorization/defaults.go` — `SystemCategories` (17 категорий RU-ландшафта) + `SystemKeywordRules` (~80 keyword→category: Магнит/Пятёрочка/Ozon/KFC/Яндекс.Такси/МТС/ЖКХ/…); confidence-константы (Keyword 0.75 / Learned 0.95 / Tentative 0.50); `MatchTier`
-- `internal/service/categorization/categorization.go` — `Categorize` (precedence: learned override → user keyword → system keyword → tentative override → no-match), `CategorizeForCreate` (adapter для operations.Categorizer), `Confirm` (Learn path)
-- `internal/transport/http/categorization.go` — `/categories` (list/create), `/categorization/rules` (list/create/delete), `/categorization/confirm`
-
-**Интеграция:**
-- `operations.Service.SetCategorizer` — optional-зависимость; в `Create` если category_id не задан и categorizer подключён → авто-категоризация. Categorizer-failure НЕ блокирует запись (важнее сохранить операцию, чем категорию)
-- `Auth.Register` — внутри tx регистрации seed-ит системные категории + keyword rules (через `SeedSystemCategories` + `SeedDefaultsForUser`). Seed-failure логируется, но НЕ блокирует регистрацию
-- main.go wiring: `categorization.NewService(pool)` + `operationsSvc.SetCategorizer(categorizationSvc)`
-
-**Верификация (24.06):** BUILD_OK / VET_OK / `go test ./...` → все пакеты зелёные
-- service/categorization: 11 тестов (precedence learned/user/system, keyword в description, no-match, нормализация, Confirm валидация, defaults sanity — каждый keyword ссылается на существующую категорию)
-- storage: 8 тестов через sqlmock (CreateRule с user-priority, duplicate, ListRules, DeleteRule, GetOverride, Upsert, SetOverrideCategory reset)
-- transport/http: 9 тестов через sqlmock+httptest (List/Create categories, List/Create/Delete rules, Confirm, unauthorized, нормализация keyword)
-
-**Хорошо:**
-- **Scope-lock соблюдён жёстко**: MCC-коды отсутствуют намеренно (MVP без банков), ML заменён детерминированным счётчиком подтверждений (LearnThreshold=3) — «3 исправления = правило» через pure counter, без training data
-- **Precedence encoded в priority**: user rules (100) > system (0), ListRules возвращает DESC → один проход по правилам даёт корректный приоритет
-- **Confidence-константы консистентны с floor**: keyword/learned выше 0.70 (apply), tentative ниже (ask UI). Проверяется тестом `TestConfidenceForTier_ConsistentWithFloor`
-- **Нормализация counterparty** применяется и при записи (override), и при поиске → always consistent
-- **Categorizer-failure tolerant**: ошибка категоризатора логируется, операция сохраняется с nil category — деньги важнее категории
-
-**Плохо / тех. долг:**
-- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении)
-- Counterparty-override хранит уже PII-маскированное значение; если изменится логика маскирования — override-ы станут невалидны (нужен re-migration)
-- `RolloverUnlimited` lookback захардкожен в 24 месяца (bounded cost)
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано):**
-Авто-категоризация — **единственная точка** в ф.2, где создаётся category assignment. Все пути (create, confirm, manual override) идут через `service/categorization`. Если появится импорт CSV (Этап 6), он ОБЯЗАН вызывать тот же service.
-
----
-
-## ✅ Этап 3 / Фича 3 — Сводный дашборд (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
-
-**Цель:** BUSINESS_LOGIC.md ф.3 — сводный дашборд «Финансовое здоровье» — достигнута.
-
-**Файлы созданы:**
-- `internal/storage/dashboard.go` — 4 агрегатных запроса:
-  - `CashflowForPeriod` (income/expense/net; transfers/exchanges/refunds исключены через `operation_type IN ('income','expense')`; planned исключены)
-  - `ExpensesByCategory` (LEFT JOIN categories, uncategorised → «Без категории» id=0, DESC по total)
-  - `NetWorth` (assets = Σ positive non-debt balances; debts = Σ |balance| debt accounts; net = assets−debts)
-  - `GoalProgresses` (progress = current/target, CASE-защита от деления на 0)
-  - `applyPeriodBounds` helper (динамический WHERE с prefix для алиаса таблицы)
-- `internal/service/dashboard/dashboard.go` — `Compute` (оркестрация 4 запросов + period-resolution), `Period` (month/quarter/year), `CustomRange`, nil-slice normalization ([] не null в JSON)
-- `internal/transport/http/dashboard.go` — `GET /dashboard?period=|from=&to=`, money как строки в JSON
-
-**Верификация (24.06):** BUILD_OK / VET_OK / зелёные
-- service/dashboard: 10 тестов (resolveBounds month/quarter/year/custom/reversed/partial, Compute assembly, nil-slice normalization, storage-error propagation)
-- storage: 6 тестов (cashflow success/no-rows, by-category с uncategorised bucket, net_worth, goal progresses + zero-target no-division)
-- transport/http: 4 теста (Get success проверка всех секций, unauthorized, bad from-date, custom range)
-
-**Хорошо:**
-- **Период-резолвция в service, SQL agnostic**: month/quarter/year → calendar bounds; custom range overrides; валидация partial/reversed. SQL-слой не знает про календарь
-- **Transfers/exchanges/refunds исключены из cashflow** на уровне SQL (соответствует ф.1/ф.3: «Переводы исключены»)
-- **NetWorth корректен для debt accounts**: debt-счета с ABS(balance) в долги, остальные в активы; overdraft уменьшает активы
-- **nil→empty slice** для стабильного JSON — фронт не падает на пустых периодах
-- **GoalProgress zero-safe**: target=0 → progress=0 (CASE в SQL), проверено тестом
-
-**Плохо / тех. долг:**
-- E2E через реальный Postgres отложен
-- NetWorth считает overdraft на non-debt счетах как уменьшение активов, но НЕ как увеличение долгов — для RU-реалий приемлемо
-
----
-
-## ✅ Этап 3 / Фича 4 — Бюджеты с rollover (ВЫПОЛНЕНО + ВЕРИФИЦИРОВАНО)
-
-**Цель:** BUSINESS_LOGIC.md ф.4 — лимиты по категориям с переносом остатков и прогнозом перерасхода — достигнута.
-
-**Файлы созданы:**
-- `internal/storage/budgets.go` — CRUD budgets (Create/Get/List/Update/Delete) + `SpendForCategory` (Σ expense по category за период, planned исключены)
-- `internal/service/budget/budget.go` — главная логика:
-  - **Rollover**: none (no carry) / unlimited (24-mo bounded lookback) / months_3 (last 3). Overspent months contribute 0 (не идём «в минус»)
-  - **Прогноз перерасхода**: `projectSpend` экстраполирует daily rate (spent/daysElapsed × daysIn); на последнем дне = spent
-  - **Status**: `ok` / `at_risk` (projected > effective) / `over` (remaining < 0) / `inactive`
-  - `periodDayCounts` clamped [1, daysIn]; `classify` чистая функция над (remaining, projected, effective)
-- `internal/transport/http/budgets.go` — `GET/POST /budgets`, `GET/PATCH/DELETE /budgets/{id}`, `GET /budgets/{id}/status`
-
-**Верификация (24.06):** BUILD_OK / VET_OK / зелёные
-- service/budget: 18 тестов (Create validation/default-rollover/duplicate, rollover none/months_3/unlimited/overspent-contributes-0, status ok/over/at_risk/inactive/not-found, projectSpend mid-month/last-day, periodDayCounts June/February)
-- storage: 10 тестов (Create success/duplicate, Get success/not-found, List, Update success/not-found, Delete not-found, SpendForCategory success/no-rows)
-- transport/http: 5 тестов (Create success/zero-limit-rejected, unauthorized, Status ok/not-found)
-
-**Ключевые эталоны:**
-- Rollover months_3: limit 15000, 3 месяца по 5000 spent → rollover 30000 (3 × 10000 remainder) ✓
-- Overspent month: May overspent 20000 (limit 10000) → contributes 0; April+March по 5000 → rollover 10000 ✓
-- Status at_risk: day 1 of 30, spent 14000 → projected >> limit 15000, remaining ещё положительный → at_risk ✓
-- projectSpend last-day: no extrapolation, projected == spent ✓
-
-**Хорошо:**
-- **Rollover-логика изолирована в service**, SQL отдаёт только raw spend per month — чистая функция тестируется детерминированно
-- **Прогноз использует decimal division** — никаких float64, exact до scale
-- **Overspent months contribute 0** — соответствует ф.4 «перенос остатков» (только положительных)
-- **Status-classification чистая функция** от 3 параметров → тривиально тестируется
-- **Inactive budget short-circuit** — не делает spend-запросы для выключенных
-
-**Плохо / тех. долг:**
-- `RolloverUnlimited` bounded 24 месяцами (cost bound)
-- Прогноз linear (daily rate × daysIn) — не учитывает недельную сезонность. Для MVP приемлемо; ML-сезонность отложена в v1.0
-- E2E через реальный Postgres отложен
-
----
-
-## ✅ ЭТАП 3 ЗАКРЫТ — Фичи 1-4 Level 1 полностью готовы
+## ✅ Статус фич
 
 | Фича | Пакет | Тестов | Статус |
-|---|---|---|---|
-| 1. Ручной ввод | service/operations + pii | 38 | ✅ (ранее) |
-| 2. Авто-категоризация | service/categorization | 28 | ✅ |
-| 3. Дашборд | service/dashboard | 20 | ✅ |
-| 4. Бюджеты | service/budget | 33 | ✅ |
+|------|-------|--------|--------|
+| 0–2. Backend scaffold, auth, daycount+tvm | config/domain/auth/ + mathcore | 38 | ✅ |
+| 3–5. Credit, investment, tax (mathcore) | `mathcore/credit`, `mathcore/investment`, `mathcore/tax` | 51 | ✅ |
+| 6. Операции (CRUD + PII + idemp) | `service/operations` + storage/HTTP | 38 | ✅ |
+| 7. Авто-категоризация | `service/categorization` | 28 | ✅ |
+| 8. Дашборд + Бюджеты | `service/dashboard` + `service/budget` | 53 | ✅ |
+| 9. Трекер целей (ф.5) | `service/goals` (18 задач, CRUD+proj+simulate) | 83 | ✅ |
+| 10. Кредитный калькулятор (ф.7) | `service/credit` + mathcore | ~40 | ✅ |
+| 11. **Калькулятор вкладов (ф.6)** | **`service/deposit` + mathcore + HTTP + frontend** | **36** | **✅ (09.07)** |
+| 12. Фронтенд: DepositPage → backend API | `DepositPage.tsx` был client-side, теперь `useDepositCalc` | — | ✅ (09.07) |
 
-Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Все деньги — строго decimal. Rollover/прогноз/агрегации — decimal end-to-end.
-
----
-
-## ✅ Этап 4 / Фича 5 — Трекер целей (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 05.07)
-
-**Цель:** BUSINESS_LOGIC.md ф.5 — трекер финансовых целей: CRUD целей + журнал
-внеплановых пополнений (идемпотентный) + проекция статуса + what-if симуляция,
-на формулах фонда возмещения (Копнова Гл. 3.3.3).
-
-**Ветка:** `feat/goal-tracker-ф5` (от `0392f00` main, HEAD `fe73caa`).
-Коммиты в этой ветке (от mathcore до wiring):
-- `08f322f` feat(goals): mathcore package doc + sentinels
-- `f5a73a4` feat(goals): SolveFutureValue + tests
-- `a5f1bc1` feat(goals): SolveContribution + tests
-- `c2bf276` feat(goals): SolveTerm + tests (Ln with precision)
-- `0ff4979` feat(goals): InflateTarget + complete mathcore goals package
-- `da7543e` feat(goals): domain types Goal/GoalContribution/GoalStatus + migration 0003
-- `204b506` feat(goals): storage layer — CRUD goals + contributions + sqlmock tests (Tasks 8-9)
-- `835a256` feat(goals): service layer — CRUD, AddContribution, Projection, Simulate (Tasks 10-11)
-- `4cce907` feat(goals): service tests + HTTP handler + dashboard hybrid model (Tasks 12-13, 17)
-- `fe73caa` feat(goals): wire GoalsHandler into router + main (Tasks 14-15)
-
-**Документы дизайна/плана (созданы, закоммичены в main):**
-- `docs/superpowers/specs/2026-06-25-goal-tracker-design.md` — спецификация (8 секций)
-- `docs/superpowers/plans/2026-06-25-goal-tracker.md` — план из 18 задач (TDD, bite-sized)
-
-**Зафиксированные решения (из brainstorming):**
-| Решение | Выбор |
-|---|---|
-| Охват | Всё сразу: CRUD + проекция + журнал пополнений + what-if |
-| Математика | Аналитика + инфляция (sinking fund, без численного solver'а) |
-| Идемпотентность пополнений | `contribution_id` (client-generated) + UNIQUE — консистентно с ф.1 `calc_id` |
-| Модель `current_amount` | Гибрид: `goals.current_amount` (baseline) + Σ `goal_contributions` = effective |
-| Пакет формул | НОВЫЙ `mathcore/goals/` (не credit!) — sinking fund не покрывается существующими |
-
-**Все 18 задач плана выполнены (05.07):**
-
-*Mathcore (Задачи 1-5):*
-- `internal/mathcore/goals/doc.go` — package doc + sentinels
-  (`ErrNonPositiveTarget`/`ErrNonPositiveContribution`/`ErrInvalidPeriods`/`ErrUnreachable`/`ErrInvalidRate`/`ErrDeflation100Percent`)
-- `internal/mathcore/goals/sinkingfund.go` — 4 функции sinking fund:
-  - `SolveFutureValue(P,A,i,n)` → `S = P·(1+i)^n + A·((1+i)^n−1)/i` (fallback `P+A·n` при i=0)
-  - `SolveContribution(P,S,i,n)` → `A = (S−P·(1+i)^n)·i/((1+i)^n−1)` (fallback `(S−P)/n`; 0 если цель достигнута ростом капитала)
-  - `SolveTerm(P,S,A,i)` → `n = ln((S·i+A)/(A+P·i))/ln(1+i)` (ErrInvalidRate при i≤0; ErrUnreachable при `A ≤ P·i`; 0 при `P≥S`)
-  - `InflateTarget(S,π,n)` → `S·(1+π)^(n/12)` (ErrDeflation100Percent при π=−1)
-- `internal/mathcore/goals/sinkingfund_test.go` — **17 тестов** (golden + edge-cases), все зелёные
-
-*Domain & миграция (Задачи 6-7):*
-- `internal/domain/goal.go` — Goal, GoalContribution, GoalStatus (on_track/at_risk/behind/achieved/no_deadline), ValidateGoal
-- `migrations/0003_goals_contributions.sql` — журнал пополнений + UNIQUE(user_id, goal_id, contribution_id) для идемпотентности
-
-*Storage (Задачи 8-9):*
-- `internal/storage/goals.go` — CRUD goals + contributions, SumContributions, sqlmock-тесты (11 тестов)
-  - `CreateGoal`/`GetGoal`/`ListGoals`/`UpdateGoal`/`DeleteGoal` (soft delete)
-  - `CreateContribution` (23505 → ErrContributionExists через translatePgError), `GetContributionByClientID`, `ListContributions`, `DeleteContribution`
-  - `SumContributions` (COALESCE, hybrid model)
-
-*Service (Задачи 10-12):*
-- `internal/service/goals/goals.go` (~486 lines) — Repo interface, CRUD, идемпотентный AddContribution, Projection, Simulate, SimulateSaved
-  - `projectWith` — pure над (goal, sum, now, inflation): achieved short-circuit, InflateTarget, SolveContribution (deadline), SolveTerm (no-deadline), fallback status
-  - `classifyStatus` — on_track/at_risk(0.9×)/behind
-  - `monthsBetween` — whole calendar months clamped >= 0
-  - **Найден и исправлен баг**: `*decimal.Decimal` передавался в `InflateTarget` вместо `decimal.Decimal` — был сломан build
-- `internal/service/goals/goals_test.go` (1086 lines, **55 тестов**) — fakeRepo in-memory, svcWithFixedNow, полный coverage API surface
-
-*HTTP handler (Задача 13):*
-- `internal/transport/http/goals.go` (656 lines) — GoalsHandler, 11 эндпоинтов:
-  GET/POST /goals, GET/PATCH/DELETE /goals/{id}, GET /goals/{id}/projection,
-  POST /goals/{id}/simulate, GET/POST /goals/{id}/contributions,
-  DELETE /goals/{id}/contributions/{cid}, POST /calc/goal
-  - Деньги как строки в JSON, writeServiceError маппит ErrNotFound→404, ErrInvalidArgument→400
-
-*Wiring (Задачи 14-15):*
-- `internal/transport/http/router.go` — `Deps.Goals *goals.Service` + `NewGoalsHandler.Register(r)` (nil = skip, graceful)
-- `cmd/server/main.go` — `goalsSvc := goals.NewService(pool)`, передаётся в Deps
-
-*Dashboard интеграция (Задача 17):*
-- `internal/storage/dashboard.go::GoalProgresses` — LEFT JOIN goal_contributions + COALESCE(SUM(gc.amount), 0)
-  → гибридная модель (effective = baseline + Σ contributions), GROUP BY полей goals, zero-safe CASE
-- `internal/storage/dashboard_test.go` — regex обновлён на новый SQL, column переименован в effective_current
-
-*Flaky-тест фикс (найден в этой сессии):*
-- `TestBudget_Status_OK` был date-dependent (5 июля projectSpend экстраполировал 5000×31/5 > 15000 → at_risk)
-- Решение: `budget.NewServiceWithNow(repo, nowFn)` — injectable clock, в test env зафиксировано на 2026-06-30 23:59 UTC
-
-**Верификация (05.07):** `go build ./...` → BUILD_OK; `go vet ./...` → VET_OK;
-`go test -count=1 ./...` → **20/20 пакетов зелёные** (cache-clean):
-- mathcore/goals: 17 тестов
-- service/goals: 55 тестов
-- storage: 21 тестов (11 goals + 10 dashboard)
-- transport/http: все endpoints покрываются
-- Ad-hoc focal-тест `TestSimulateSaved_InflateTarget_Path` PASS (исправленная ветка InflateTarget)
-
-**КРИТИЧЕСКАЯ НАХОДКА (зафиксирована):**
-В shopspring/decimal v1.4.0 сигнатуры трансцендентных функций НЕ однородны:
-- `Pow(d2 Decimal) Decimal` — возвращает Decimal **без error** (внутри сам проглатывает ошибки `Ln`+`ExpTaylor`)
-- `Ln(precision int32) (Decimal, error)` — возвращает **(Decimal, error)**, требует явный precision
-Поэтому `SolveFutureValue`/`SolveContribution` (через `Pow`) пишутся тривиально, а `SolveTerm` (через `Ln`) требует обработки двух ошибок + precision=16. Это породило баг в service/goals/goals.go:361 (передача `*decimal.Decimal` вместо `decimal.Decimal` в InflateTarget) — найден и исправлен.
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
-Фича 5 — НЕ «переиспользует credit пакет». `credit.AnnuityPayment` считает **погашение кредита** (отрицательный поток, амортизация долга), а `tvm.CompoundInterest` работает с **одноразовым principal**. Задача «накопить к сроку регулярными взносами с доходностью» — это **фонд возмещения** (sinking fund), для которого потребовался **новый** `mathcore/goals/`. Число documented float64-bridges осталось = 2 (sinking fund решается аналитически, без BrentQ).
-
-**КРИТИЧЕСКОЕ РЕШЕНИЕ (зафиксировано для будущих сессий):**
-Гибридная модель `effective_current = goals.current_amount (baseline) + Σ goal_contributions.amount` — self-healing на каждом recompute (аналог ф.1 recompute balances). Не кешируется. Реализована и в service.Compute, и в storage.dashboard.GoalProgresses (LEFT JOIN + COALESCE).
-
-**Хорошо:**
-- **Все 18 задач плана выполнены** — от mathcore/formulas до HTTP handler и wiring
-- **Идемпотентность пополнений** в стиле ф.1: (user_id, goal_id, contribution_id) UNIQUE → ErrContributionExists → fetch оригинала → (orig, true, nil)
-- **Projection math изолирована** в `projectWith` (чистая над goal + sum + now + inflation), тестируется детерминированно через svcWithFixedNow
-- **Money decimal end-to-end** — нигде во всём конвейере goals не проходит float64
-- **HTTP handler симметричен budget** — тот же decodeJSON/writeJSON/writeError/MustUserID паттерн
-- **Dashboard интегрирован** — GoalProgresses использует effective (baseline + Σ contributions)
-- **Build/vet/test — 20/20 зелёные** после всех задач, не только mathcore
-
-**Плохо / тех. долг:**
-- E2E через реальный Postgres по-прежнему отложен (нет docker в окружении)
-- `SimulateSaved` не позволяет override `CurrentAmount` в 0 (uses `IsPositive()` check) — семантическая дыра, отложена
-- `SumContributions` SQL не фильтрует soft-deleted goals (JOIN с goals отсутствует) — сейчас безопасна т.к. service.GetGoal отрезает, но при прямом вызове repo — потенциальная дыра
-- `ListContributions` без пагинации — растёт безгранично (technical debt, упомянут ранее)
-- `MonthlyContribution=0` проходит ValidateGoal, но `projectWith` трактует как "нет взноса" — семантическая несогласованность
-- `Simulate` подставляет `Name: "simulate"` в `Projection.Goal` — лучше `""` или отдельное поле `IsSimulated`
-- HTTP handler пока **без тестов** (Task 16 — `transport/http/goals_test.go` — делегирован субагенту, в работе)
+**Total Go test packages:** 22 (все зелёные, проверено 09.07). **Documented float64 bridges:** 2.
 
 ---
 
-## ⏳ Этап 4 — Фичи 5-9 Level 2 калькуляторы — ПРОДОЛЖЕНИЕ
+## 🧮 Mathcore — все пакеты
 
-Используют готовое mathcore (tvm/credit/investment/tax/goals):
-- Фича 5: трекер целей — **✅ ВЫПОЛНЕНО** (см. секцию выше; все 18 задач: mathcore/goals + domain + миграция + storage + service + HTTP handler + wiring + dashboard интеграция)
-- Фича 6: калькулятор вкладов (tvm.CompoundInterest + daycount + tax.DepositTax + tvm.FisherRealRate)
-- Фича 7: кредитный калькулятор (credit.Annuity/Differentiated + credit.PSK + credit.EarlyRepayment)
-- Фича 8: анализ доступности кредита (стресс-тест по минимальному доходу)
-- Фича 9: ипотека vs аренда (точка безубыточности)
+| Пакет | Формулы | Источник |
+|-------|---------|----------|
+| `daycount` | ACT/365, 30/360 ISDA, ACT/ACT ISMA | Копнова Гл. 1 |
+| `tvm` | Simple, Compound, Effective, Fisher | Копнова Гл. 1-2 |
+| `credit` | Annuity, Differentiated, PSK (ЦБ 5750-У), Early, **BrentQ** | Копнова Гл. 4, ЦБ 5750-У |
+| `investment` | NPV, XIRR (BrentQ), MIRR, DPP, PI | Копнова Гл. 5-6 |
+| `tax` | НДФЛ (5-tier marginal), НПД, УСН, DepositTax (ФЗ-382) | НК РФ Гл. 23/26.2, ФЗ-422/382/257 |
+| `goals` | Sinking Fund: FV, Contribution, Term, InflateTarget | Копнова Гл. 3.3.3 |
+| `deposit` | Compound/Simple interest, cap freq, effective rate, Fisher, projection | Копнова Гл. 1-2 |
 
-Этап 5: AI stub (fallback-шаблоны)
-Этап 6: CSV/Excel импорт + OpenAPI + E2E
+**Shopspring gotchas:** `Pow(d2) Decimal` — без error; `Ln(precision int32) (Decimal, error)` — с error.
 
 ---
 
----
+## 🚀 Vercel Deploy — текущее состояние (09.07)
 
-## ❌ Vercel Deploy — Go Serverless Function (ФИНАЛЬНЫЙ СТАТУС, 09.07)
-
-**Постановка:** Развернуть Go API (chi-router) на Vercel (`finhelper-frontend.vercel.app`)
-в виде Serverless Function с PostgreSQL (Neon).
-
-### 🏗 Архитектура (текущая, рабочая)
-
-```
-api/index.go ──go:build──→ λ (serverless function)
-  │
-  ├── chi.Router / → /api/v1/* (transporthttp.NewRouter)
-  ├── GET /healthz → {"status":"ok"} ✅
-  ├── GET /readyz  → {"status":"ready"} ✅
-  ├── POST /api/v1/migrate → apply schemas (diagnostic) ✅
-  └── POST /api/v1/auth/register → ❌ 500 (partial schema)
-```
-
-**Структура модулей (стабильная, финализирована):**
-
-| Файл | Назначение |
-|---|---|
-| `go.mod` (корень) | `module github.com/RedEye472-afk/FinHelper`, `replace ./backend` |
-| `backend/go.mod` | `module github.com/RedEye472-afk/FinHelper/backend` — реальный модуль |
-| `api/index.go` | `package handler` — self-contained chi-λ, импорты `backend/pkg/...` |
-| `backend/pkg/migrate/migrate.go` | `//go:embed migrations/*.sql`, `Run(ctx, pool)`, `splitSQL` |
-| `backend/pkg/migrate/migrations/*.sql` | 4 миграции (0001_init → 0004_verification) |
-| `backend/cmd/migrator/main.go` | CLI-мигратор для прямого запуска на любой БД |
-| `backend/cmd/checkschema/main.go` | CLI-диагностика схемы |
-
-### 🔄 История деплоя
-
-| Попытка | Ветка | Метод | Результат |
-|---|---|---|---|
-| 1 | bridge.Start | `backend/cmd/vercel/main.go` | λ 5MB, routes пустые |
-| 2 | `package handler` + `api/index.go` | Chi без bridge | **healthz/readyz 200** ✅ |
-| 3 | + асинхронные миграции (goroutine, 30s) | `migrate.Run` в фоне | healthz 200, register 500 (partial schema) |
-| 4 | + синхронные миграции (60s) + `/api/v1/migrate` + safety | **ТЕКУЩАЯ** | λ стабильна, schema неполная |
-
-### 🔍 Диагностика (Vercel logs, 08.07 21:36)
-
-```
-register: seed rules error="storage: resolve category ids: 
-ERROR: column \"deleted_at\" does not exist (SQLSTATE 42703)"
-```
-
-Структура лога `/api/v1/migrate` (09.07 01:51):
-```
-migration 0001_init already applied, skipping          ← check: tablename='users'
-migration 0002_categorization ERROR: function touch_updated_at() does not exist
-migration 0002_categorization: 4/6 statements applied   ← triggers упали
-migration 0003_goals_contributions already applied
-migration 0004_verification already applied
-schema: 6/6 core tables confirmed                        ← verifySchema OK
-```
-
-**Причина:** Первый запуск миграции (30s timeout, асинхронный) создал таблицы ЧАСТИЧНО:
-- `users` создан → последующие холодные старты SKIP 0001
-- Но `deleted_at` колонка отсутствует в `categories` (не определена, почему DDL не дошёл)
-- `touch_updated_at()` function отсутствует → триггеры 0002 падают
-
-### 📋 План фикса (следующая сессия)
-
-1. **Создать `0005_fix_deleted_at.sql`** — ALTER TABLE ADD COLUMN IF NOT EXISTS для всех таблиц, где может отсутствовать `deleted_at` + CREATE OR REPLACE FUNCTION touch_updated_at()
-2. **Ужесточить check 0001_init** — проверять не только `users`, а наличие функции `touch_updated_at()` (или полный состав таблиц)
-3. **Проверить `channel_binding=require`** — возможно, DDL-соединение теряется из-за PgBouncer + require channel binding
-4. **Запустить `/api/v1/migrate`** после фикса и протестировать регистрацию
-
-### ✅ Что работает сейчас
-
-- `GET /api/v1/healthz` → 200 `{"status":"ok"}`
-- `GET /api/v1/readyz` → 200 `{"status":"ready"}`
-- `POST /api/v1/migrate` → 200 `{"status":"ok","msg":"migrations applied"}`
-- Vercel build → стабильно зелёный (~2 min)
-- Go-билд локально → `go build ./...` OK
-- Go-тесты (все 20+) → зелёные (проверено локально)
+### ✅ Работает
+- Frontend SPA: `https://finhelper-frontend.vercel.app` (Vite build, 2847 modules)
+- Go λ: `api/index.go` (chi-router, 5.41MB), `/healthz` и `/readyz` отвечают
+- Build: стабильно зелёный (~2 min). `go build/vet/test` — локально зелёные.
 
 ### ❌ Что не работает
+- **Neon DB connection таймаутит из Vercel λ.** Функция не отвечает (ни degraded mode, ничего).
+  - Строка: `postgresql://neondb_owner:npg_3RGdJ8DlAWbT@ep-long-base-at9e3d0y-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require`
+  - Из локальной среды (pip pg8000): **соединение в 1.3с** — пароль верный, хост жив
+  - Из Vercel: полный таймаут (>60s). Предыдущая строка (с неверным паролем) отвечала «degraded mode» за <10s
+  - **Гипотезы:** (а) Vercel Hobby (10s init timeout) не хватает на холодный старт λ + Neon pooler; (б) pooler (`ep-long-base-at9e3d0y-pooler`) блокирует IP Vercel; (в) pgx v5.10.0 зависает на SCRAM-SHA-256 с этим конкретным pooler.
+- Все эндпоинты, требующие БД, недоступны (auth, operations, goals, dashboard, budgets). Stateless `/calc/*` могли бы работать, но без БД не проходит init.
 
-- `POST /api/v1/auth/register` → 500 (partial schema — `deleted_at` missing)
-- `POST /api/v1/auth/login` → 500 (причина та же)
-- **Все API-маршруты, требующие БД с полной схемой**
+### Структура Vercel λ
 
-### 🗄 Состояние БД (Neon)
+```
+api/index.go
+├── config.Load() → cfg
+├── storage.Open(cfg.Database.URL) → pool  ← 5s ping timeout, вешается
+├── migrate.Run(ctx, pool)  ← 60s context, не доходит
+├── auth.NewJWTIssuer(...)
+├── service init (operations, categorization, dashboard, budget, goals, credit, deposit)
+├── chi.NewRouter()
+│   ├── /healthz → {"status":"ok"}
+│   ├── /readyz  → {"status":"ready"} (или degraded)
+│   ├── /migrate → trigger migration
+│   └── /api/v1/* → apiRouter (transporthttp.NewRouter)
+└── func Handler(w, r) { getHandler().ServeHTTP(w, r) }
+```
 
-- **Путь:** `postgresql://neondb_owner:***@ep-long-base-at9e3d0y-pooler.c-9.us-east-1.aws.neon.tech/neondb`
-- **Схема:** частичная — таблицы есть, но отсутствует `deleted_at` в `categories` + функция `touch_updated_at()`
-- **Пароль:** устарел/недоступен через `vercel env pull` (зашифрован)
-- **Fallback:** CLI-мигратор (`backend/cmd/migrator/main.go`) написан, проверен на локальном Docker
-
-### 📦 Коммиты (git, push в main)
-
-- `bcc40ea` — Migrations, migrator CLI, diagnostics, 60s sync timeout, safe verifySchema
-  - 62 files, +2419/−130 lines
-  - Включает: migration files (0001-0004), api/index.go, backend/cmd/migrator, backend/cmd/checkschema
-  - Все файлы закоммичены → Vercel build получает актуальные миграции
+После смены DATABASE_URL на рабочий пароль — функция не доходит даже до degraded mode. Проблема: `storage.Open()` с корректными кредами не успевает за 10s Vercel инициалайз либо pooler вешается.
 
 ---
 
-## 🔧 Команды для восстановления контекста
+## 📦 Последние коммиты
+
+| Хеш | Время | Описание |
+|-----|-------|----------|
+| `df05c90` | 09.07 12:00 | feat(deposit): implement ф.6 deposit calculator — mathcore + service + HTTP |
+| `b043d67` | 09.07 15:40 | feat(deposit): wire deposit service in Vercel API + rework deposit page |
+| current | 09.07 16:30+ | +DATABASE_URL updates, multiple redeploys |
+
+---
+
+## 🔧 Команды (fast reference)
 
 ```bash
-# Сборка + тесты (backend)
-cd C:/Users/user/ZCodeProject/FinHelper/backend
-"C:/Program Files/Go/bin/go.exe" build ./...
-"C:/Program Files/Go/bin/go.exe" vet ./...
-"C:/Program Files/Go/bin/go.exe" test -count=1 ./...
-
-# Vercel deploy
-cd C:/Users/user/ZCodeProject/FinHelper
-"/c/Users/user/AppData/Roaming/npm/vercel.cmd" deploy --prod --force --yes
-
-# Запустить миграции на production (через λ)
-curl -X POST https://finhelper-frontend.vercel.app/api/v1/migrate
-
-# Запустить миграции на локальной Docker-БД
-docker exec finhelper-postgres psql \
-  "postgresql://finhelper:finhelper_pass@localhost:5432/finhelper?sslmode=disable" \
-  -f backend/pkg/migrate/migrations/0001_init.sql
-
-# CLI-мигратор (локальный)
+# Backend build + test
 cd /c/Users/user/ZCodeProject/FinHelper/backend
-DATABASE_URL="postgresql://finhelper:finhelper_pass@localhost:5432/finhelper?sslmode=disable" \
-  "C:/Program Files/Go/bin/go.exe" run ./cmd/migrator/
+"C:/Program Files/Go/bin/go.exe" build ./... && "C:/Program Files/Go/bin/go.exe" vet ./... && "C:/Program Files/Go/bin/go.exe" test -count=1 ./...
 
-# Vercel logs
-"/c/Users/user/AppData/Roaming/npm/vercel.cmd" logs --expand --since 5m
+# Frontend build
+cd /c/Users/user/ZCodeProject/FinHelper/frontend && npm run build
 
-# Smoke-тест λ
-curl -s --max-time 60 https://finhelper-frontend.vercel.app/api/v1/healthz
-curl -s --max-time 60 https://finhelper-frontend.vercel.app/api/v1/readyz
-curl -s --max-time 120 -X POST https://finhelper-frontend.vercel.app/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"Test1234!"}'
+# Vercel deploy (из frontend/ — слинкован с finhelper-frontend)
+cd /c/Users/user/ZCodeProject/FinHelper/frontend && npx vercel deploy --prod --force --yes
+
+# Vercel env management
+npx vercel env ls production
+npx vercel env rm DATABASE_URL production --yes
+echo -n "new_url" | npx vercel env add DATABASE_URL production --yes
+
+# Проверить λ
+curl -s --max-time 15 https://finhelper-frontend.vercel.app/api/v1/healthz
 ```
 
-## 📚 Принятые архитектурные решения (09.07)
+---
 
-Обновлено по итогам Vercel deploy:
+## 🧩 Эта сессия (09.07) — что сделано
 
-- **Модульная структура:** корневой `go.mod` с `replace ./backend` — единственный способ заставить Vercel резолвить импорты `backend/pkg/...`. Без этого Vercel ищет `pkg/` в корне репозитория.
-- **`package handler` в `api/index.go`:** НЕ `bridge.Start()`, НЕ `package main`. Chi-роутер без bridge-зависимости — стабильнее.
-- **Миграции синхронны (60s timeout):** асинхронные миграции приводили к частичной схеме + Vercel λ таймауту. Синхронные с 60s не блокируют λ (укладываются).
-- **`verifySchema` НЕ убивает процесс:** `log.Fatalf` → `log.Printf` (λ продолжает работу с degraded-схемой).
-- **Idempotency-ключи миграций:** `SELECT 1 FROM pg_tables WHERE tablename = 'users'` для 0001 — **недостаточно**. Нужна проверка полной схемы (функция `touch_updated_at()` или список всех обязательных колонок).
+### Задача: Синхронизировать фронтенд с новыми фичами и задеплоить
 
-## ✅ Фича 6 — Калькулятор вкладов (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 09.07)
+**Что сделано:**
+1. **`api/index.go`** — добавлена инициализация `depSvc := deposit.NewService()` + `Deposit: depSvc` в Deps (было упущено, Go build проходил).
+2. **`calculators.ts`** — добавлены типы `DepositRequest`, `DepositResponse`, `DepositProjectionRow` + функция `calculateDeposit`.
+3. **`queries.ts`** — добавлен хук `useDepositCalc` (mutation).
+4. **`DepositPage.tsx`** — переписан с client-side `decimal.js` на вызов `POST /api/v1/calc/deposit` через `useDepositCalc`. Добавлены: projection table, loading/error states, real return, tax, disclaimer. Стиль унифицирован с CreditPage.
+5. **Коммит и пуш** `b043d67` → авто-деплой на Vercel.
+6. **Несколько редеплоев** с разными `DATABASE_URL` (исходная с `channel_binding=require`, очищенная, с устаревшим паролем).
 
-**Цель:** BUSINESS_LOGIC.md ф.6 — stateless калькулятор вкладов с капитализацией,
-эффективной ставкой, реальной доходностью по Фишеру, налогом и помесячной проекцией — достигнута.
+### Текущий блокер: Vercel λ не стартует с правильным DATABASE_URL
+- Старая строка (неверный пароль) → degraded mode за <10s ✅
+- Новая строка (правильный пароль) → полный таймаут >60s ❌
+- Neon проверен из локального окружения — работает (1.3s, PostgreSQL 18.4)
+- Возможные причины:
+  a) Пул соединений pgx + Neon pooler зависает при SCRAM-SHA-256
+  b) Vercel Hobby (10s init timeout) прерывает холодный старт
+  c) Neon pooler endpoint блокирует Vercel IP-диапазоны
+  d) `stdlib.OpenDB` + `PingContext(5s)` не хватает на полный handshake
 
-**Файлы созданы:**
-- `backend/pkg/mathcore/deposit/deposit.go` (~256 lines) — чистые формулы:
-  - `Calculate(P, rate, months, capFreq, inflation)` → Result (CapFreq: maturity/annually/quarterly/monthly)
-  - `buildProjection` — помесячная разбивка для графика
-  - Формулы: S = P·(1+i/m)^(m·t) (сложный), S = P·(1+rate·t) (простой)
-  - Эффективная ставка: i_eff = (1+i/m)^m − 1
-  - Фишер: r_real = (1+r_nom)/(1+π) − 1
-  - Источник: MATH_FORMULAS.md §1.1-1.4 (Копнова Гл. 1-2)
-- `backend/pkg/mathcore/deposit/deposit_test.go` — 15 тестов (golden + edge-cases)
-- `backend/pkg/service/deposit/deposit.go` — оркестрация, валидация, tax (НК РФ ст. 214.2)
-- `backend/pkg/service/deposit/deposit_test.go` — 16 тестов
-- `backend/pkg/transport/http/deposit.go` — POST /calc/deposit handler
-- `backend/pkg/transport/http/deposit_test.go` — 5 HTTP-тестов
-
-**Wiring:**
-- `backend/pkg/transport/http/router.go` — `Deps.Deposit *deposit.Service` + `NewDepositHandler.Register(r)`
-- `backend/cmd/server/main.go` — `depositSvc := deposit.NewService()`
-
-**Верификация (09.07):**
-- `go build ./...` → BUILD_OK
-- `go vet ./...` → VET_OK
-- `go test ./...` → **все 22 пакета зелёные** (+mathcore/deposit + service/deposit)
-- Ключевые эталоны:
-  - Monthly cap: 100000 @ 10% × 12m = 110471.31
-  - Simple (mat.): 100000 @ 10% × 6m = 105000.00
-  - Fisher real return: (1.10/1.08) − 1 ≈ 0.01852
-
-**Хорошо:**
-- Роутер зарегистрирован как `POST /api/v1/calc/deposit` — симметрично `/calc/credit` (ф.7) и `/calc/goal` (ф.5)
-- **Налог на вклады** считает порог по ключевой ставке ЦБ (упрощённо: 1M × 0.21)
-- **Disclaimer** всегда присутствует: «Расчёт носит справочный характер. Реальная доходность зависит от условий банка и может отличаться.»
-
-**Плохо / тех. долг:**
-- `TaxYear` использует упрощённую модель НДФЛ (13%), не bracket-движок из tax.NDFL()
-- Ключевая ставка ЦБ захардкожена (0.21 для 2025-2026) — нужен справочник из mathcore/tax/configs
-- HTTP-тесты используют строковые сравнения decimal — могут flaky на разных версиях shopspring
-
-## ✅ Фича 7 — Кредитный калькулятор (ВЫПОЛНЕН, ВЕРИФИЦИРОВАН РАНЕЕ)
-
-**Цель:** BUSINESS_LOGIC.md ф.7 — stateless кредитный калькулятор с аннуитетом,
-дифференцированными платежами, ПСК (ЦБ 5750-У) и досрочным погашением — достигнута ранее.
-
-**Статус:** Полностью реализован на main до начала текущей сессии:
-- `backend/pkg/mathcore/credit/` — annuity, differentiated, PSK, early repayment, BrentQ
-- `backend/pkg/service/credit/` — оркестрация, валидация
-- `backend/pkg/transport/http/credit.go` — POST /calc/credit handler
-- Все тесты зелёные (20 mathcore + service + HTTP)
-
-## 🛠 Инструменты разработки (НАСТРОЕНЫ, 09.07)
-
-| Инструмент | Версия | Статус |
-|-----------|--------|--------|
-| Vercel CLI | v54.21.1 | ✅ глобально |
-| Playwright | v1.61.1 | ✅ глобально + Chromium установлен |
-| puppeteer-extra + stealth | v3.3.6 / v2.11.2 | ✅ глобально |
-| pip: cloudscraper | v1.2.71 | ✅ |
-| pip: deep-translator | v1.11.4 | ✅ |
-| pip: undetected-chromedriver | v3.5.5 | ✅ |
-| npm: cheerio, axios, sharp, file-type, fake-useragent, @vitalets/google-translate-api | — | ✅ глобально |
-
-## ✅ Миграция 0005 — Фикс Vercel partial schema (ВЫПОЛНЕН + ЗАПУШЕН, 09.07)
-
-**Проблема:** Vercel λ применяла 0001 асинхронно с таймаутом 30s → схема частичная.
-Последующие холодные старты пропускали 0001 (проверка `tablename='users'` проходила),
-но `deleted_at` в categories и `touch_updated_at()` отсутствовали → все эндпоинты падали с 500.
-
-**Решение:**
-1. Создан `0005_fix_schema.sql` — идемпотентный DDL (ALTER TABLE ADD COLUMN IF NOT EXISTS + CREATE OR REPLACE FUNCTION)
-2. `migrate.go` усилен: проверка 0001 верифицирует ВСЕ 6 таблиц + функцию `touch_updated_at()` (поле `fn_full_0001_schema`)
-3. `go build` / `go vet` / `go test` — все 22 пакета зелёные
-4. Изменения закоммичены и запущены в origin/main
-
-**Файлы:** `backend/pkg/migrate/migrations/0005_fix_schema.sql` (NEW, 173 строк), `backend/pkg/migrate/migrate.go` (MODIFIED)
-
-| Пакет | Тестов | Статус |
-|------|--------|--------|
-| mathcore/deposit | 15 | ✅ |
-| service/deposit | 16 | ✅ |
-| transport/http (deposit) | 5 | ✅ |
-| **ИТОГО (Phase 4)** | **36** | **✅** |
+### План следующей сессии
+1. **Диагностировать** таймаут λ: попробовать `sslmode=disable` для Neon, увеличить ping timeout, или перейти на прямой хост (не pooler).
+2. **Решить БД**: или фикс Neon connection, или замена на локальный Docker PG + ngrok/tunnel.
+3. **Проверить** все эндпоинты после восстановления БД: auth register/login, operations CRUD, dashboard, budget, goals, калькуляторы.
+4. **Добавить** E2E тесты для деплоя (если будет CI).
