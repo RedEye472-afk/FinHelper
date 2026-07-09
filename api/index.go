@@ -2,9 +2,11 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,19 +30,33 @@ import (
 	transporthttp "github.com/RedEye472-afk/FinHelper/backend/pkg/transport/http"
 )
 
-var (
-	h    http.Handler
-	once sync.Once
-)
+// readyHandler holds the fully-initialised router once the background
+// init goroutine completes. nil = still warming up.
+var readyHandler atomic.Pointer[http.Handler]
 
-func getHandler() http.Handler {
-	once.Do(func() {
-		h = initHandler()
+// initOnce guarantees the background goroutine launches exactly once.
+var initOnce sync.Once
+
+// startInit launches a background goroutine that connects to the DB,
+// applies migrations, and builds the full API router. The λ answers
+// immediately (see Handler below); callers get 503 "initializing" until
+// readyHandler is set.
+//
+// On failure the goroutine sets a degraded handler instead, so the λ
+// always has a valid response path.
+func startInit() {
+	initOnce.Do(func() {
+		go func() {
+			h := initHandlerWithRetry()
+			readyHandler.Store(&h)
+			log.Println("vercel: background init complete")
+		}()
 	})
-	return h
 }
 
-func initHandler() http.Handler {
+// initHandlerWithRetry builds the full router, retrying DB connection
+// a few times before giving up and returning a degraded router.
+func initHandlerWithRetry() http.Handler {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Printf("vercel: config load error, degraded mode: %v", err)
@@ -48,20 +64,33 @@ func initHandler() http.Handler {
 	}
 
 	logger := applog.New(cfg.Log.Level, cfg.Log.Format)
-	ctx := context.Background()
 
-	pool, dbErr := storage.Open(ctx, cfg.Database.URL)
-	if dbErr != nil {
-		log.Printf("vercel: db unavailable (degraded mode): %v", dbErr)
-		return buildDegradedRouter("database unavailable: " + dbErr.Error())
+	// Retry DB connection: Neon cold-start can take a few seconds.
+	// Vercel λ stays warm between requests, so by the 2nd-3rd attempt
+	// the Neon pooler should respond.
+	var pool *storage.Pool
+	var dbErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		pool, dbErr = storage.Open(context.Background(), cfg.Database.URL)
+		if dbErr == nil {
+			break
+		}
+		log.Printf("vercel: db attempt %d/3 failed: %v", attempt, dbErr)
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second) // 2s, 4s
+		}
 	}
+	if dbErr != nil {
+		log.Printf("vercel: db unavailable after 3 attempts (degraded): %v", dbErr)
+		return buildDegradedRouter("database unavailable")
+	}
+	log.Println("vercel: db connected")
 
-	// Apply schema migrations synchronously before starting services.
-	// If migrations fail or time out, the λ goes degraded.
+	// Apply schema migrations synchronously inside the goroutine.
 	migrateCtx, migrateCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer migrateCancel()
 	migrate.Run(migrateCtx, pool)
-	log.Println("migrations completed")
+	log.Println("vercel: migrations completed")
 
 	issuer, err := auth.NewJWTIssuer(
 		cfg.JWT.AccessSecret, cfg.JWT.RefreshSecret,
@@ -151,6 +180,37 @@ func initHandler() http.Handler {
 	return r
 }
 
+// buildWarmingRouter returns a router that answers 503 "initializing"
+// for everything except /healthz (always 200). This lets the λ respond
+// instantly on cold start while the DB connects in the background.
+func buildWarmingRouter() http.Handler {
+	r := chi.NewRouter()
+	r.Use(chimw.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: false,
+	}))
+
+	body, _ := json.Marshal(map[string]any{
+		"status":      "initializing",
+		"retry_after": 2,
+	})
+
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","note":"initializing"}`))
+	})
+	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write(body)
+	})
+	return r
+}
+
 func buildDegradedRouter(reason string) http.Handler {
 	msg := `{"status":"degraded","note":"` + reason + `"}`
 	r := chi.NewRouter()
@@ -180,6 +240,18 @@ func buildDegradedRouter(reason string) http.Handler {
 }
 
 // Handler is the Vercel Serverless Function entry point.
+//
+// Flow:
+//  1. Launch background init goroutine (once).
+//  2. If full router is ready → delegate to it.
+//  3. If not → answer 503 "initializing" (warming router) so the λ
+//     returns instantly without exceeding the Vercel Hobby 10s limit.
 func Handler(w http.ResponseWriter, r *http.Request) {
-	getHandler().ServeHTTP(w, r)
+	startInit()
+
+	if hPtr := readyHandler.Load(); hPtr != nil {
+		(*hPtr).ServeHTTP(w, r)
+		return
+	}
+	buildWarmingRouter().ServeHTTP(w, r)
 }
