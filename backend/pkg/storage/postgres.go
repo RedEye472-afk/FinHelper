@@ -23,34 +23,46 @@ type Pool struct {
 	DB *sql.DB
 }
 
-// Open creates a connection pool to the given Postgres URL.
+// Open creates a connection pool to the given Postgres URL and pings
+// immediately to verify connectivity.
 //   - max 25 open connections, 25 idle
 //   - conn max lifetime 30 min, idle 5 min
 //
 // The caller MUST call Close when done.
 func Open(ctx context.Context, databaseURL string) (*Pool, error) {
+	pool, err := OpenLazy(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := pool.DB.PingContext(pingCtx); err != nil {
+		_ = pool.DB.Close()
+		return nil, fmt.Errorf("storage: ping database: %w", err)
+	}
+	return pool, nil
+}
+
+// OpenLazy creates a connection pool WITHOUT connecting. The first
+// query triggers the actual TCP + SCRAM handshake. Use this in
+// serverless environments where init time is limited (e.g. Vercel
+// Hobby 10s timeout). Callers should handle connection errors at
+// query time instead.
+func OpenLazy(databaseURL string) (*Pool, error) {
 	if databaseURL == "" {
 		return nil, fmt.Errorf("storage: DATABASE_URL is empty")
 	}
 
-	// ParseConfig accepts the same URL forms as pgxpool and gives us a
-	// *pgx.ConnConfig that stdlib can wrap into a *sql.DB.
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("storage: parse database url: %w", err)
 	}
 	db := stdlib.OpenDB(*cfg.ConnConfig)
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxLifetime(30 * time.Minute)
-	db.SetConnMaxIdleTime(5 * time.Minute)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
-	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := db.PingContext(pingCtx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("storage: ping database: %w", err)
-	}
 	return &Pool{DB: db}, nil
 }
 
