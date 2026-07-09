@@ -363,6 +363,28 @@ func TestGoalsHandler_Create_NonPositiveTarget(t *testing.T) {
 	}
 }
 
+func TestGoalsHandler_Create_MissingName(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodPost, env.srv.URL+"/goals", map[string]any{
+		"target_amount": "1000.00",
+	})
+	// Service validation rejects empty name; writeServiceError surfaces it
+	// as 500 (pre-existing gap, same root cause as NonPositiveTarget).
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500 (see NonPositiveTarget comment)", resp.StatusCode)
+	}
+}
+
+func TestGoalsHandler_Create_BadExpectedYield(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodPost, env.srv.URL+"/goals", map[string]any{
+		"name": "X", "target_amount": "1000.00", "expected_yield": "not-a-number",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestGoalsHandler_Create_BadTargetAmount(t *testing.T) {
 	env := newGoalsTestEnv(t)
 	resp, raw := goalReq(t, http.MethodPost, env.srv.URL+"/goals", map[string]any{
@@ -539,6 +561,50 @@ func TestGoalsHandler_Update_NotFound(t *testing.T) {
 	})
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d (want 404), body = %s", resp.StatusCode, raw)
+	}
+}
+
+func TestGoalsHandler_Update_InvalidID(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodPatch, env.srv.URL+"/goals/abc", map[string]any{
+		"name": "X", "target_amount": "1000.00", "current_amount": "0",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestGoalsHandler_Update_NegativeID(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodPatch, env.srv.URL+"/goals/-5", map[string]any{
+		"name": "X", "target_amount": "1000.00", "current_amount": "0",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestGoalsHandler_Update_MalformedJSON(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	id := mustCreateGoal(t, env, map[string]any{
+		"name": "X", "target_amount": "1000.00",
+	})
+	resp, _ := goalReqRaw(t, http.MethodPatch, env.srv.URL+"/goals/"+strconv.FormatInt(id, 10), []byte(`{"name":"bad"`))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestGoalsHandler_Update_BadCurrentAmount(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	id := mustCreateGoal(t, env, map[string]any{
+		"name": "X", "target_amount": "1000.00",
+	})
+	resp, _ := goalReq(t, http.MethodPatch, env.srv.URL+"/goals/"+strconv.FormatInt(id, 10), map[string]any{
+		"name": "X", "target_amount": "1000.00", "current_amount": "not-money",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
 
@@ -739,6 +805,14 @@ func TestGoalsHandler_SimulateSaved_InvalidID(t *testing.T) {
 
 // ---- tests: contributions ----
 
+func TestGoalsHandler_ListContributions_InvalidID(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodGet, env.srv.URL+"/goals/abc/contributions", nil)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestGoalsHandler_ListContributions_Empty(t *testing.T) {
 	env := newGoalsTestEnv(t)
 	id := mustCreateGoal(t, env, map[string]any{
@@ -878,6 +952,16 @@ func TestGoalsHandler_AddContribution_GoalNotFound(t *testing.T) {
 	})
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d (want 404, service checks ownership), body = %s", resp.StatusCode, raw)
+	}
+}
+
+func TestGoalsHandler_AddContribution_InvalidGoalID(t *testing.T) {
+	env := newGoalsTestEnv(t)
+	resp, _ := goalReq(t, http.MethodPost, env.srv.URL+"/goals/abc/contributions", map[string]any{
+		"contribution_id": "client-x", "amount": "100.00",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
 

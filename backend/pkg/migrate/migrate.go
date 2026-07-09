@@ -45,6 +45,16 @@ func Run(ctx context.Context, pool *storage.Pool) {
 			// If already applied — skip.
 			check: "SELECT 1 FROM pg_proc WHERE proname = 'fn_full_0001_schema'",
 		},
+		{
+			name: "0006_align_accounts_schema",
+			// Check: column account_type exists in accounts (renamed from "type" by this migration).
+			check: "SELECT 1 FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'account_type'",
+		},
+		{
+			name: "0007_align_schema_to_code",
+			// Check: column operation_type exists (renamed from "type").
+			check: "SELECT 1 FROM information_schema.columns WHERE table_name = 'operations' AND column_name = 'operation_type'",
+		},
 	}
 
 	for _, m := range migrations {

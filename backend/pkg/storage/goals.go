@@ -138,8 +138,13 @@ func (p *Pool) DeleteGoal(ctx context.Context, userID, id int64) error {
 // the projection layer for the hybrid effective-current model
 // (design spec §3.2): effective = goal.current_amount + Σ contributions.
 // Zero when the goal has no contributions (COALESCE in SQL).
+// JOINs goals and filters g.deleted_at IS NULL so contributions belonging to
+// soft-deleted goals are excluded from the sum.
 func (p *Pool) SumContributions(ctx context.Context, userID, goalID int64) (domain.Money, error) {
-	const q = `SELECT COALESCE(SUM(amount), 0) FROM goal_contributions WHERE user_id = $1 AND goal_id = $2`
+	const q = `SELECT COALESCE(SUM(gc.amount), 0)
+		FROM goal_contributions gc
+		JOIN goals g ON g.id = gc.goal_id AND g.user_id = gc.user_id
+		WHERE gc.user_id = $1 AND gc.goal_id = $2 AND g.deleted_at IS NULL`
 	tot := new(decimalScanner)
 	if err := p.DB.QueryRowContext(ctx, q, userID, goalID).Scan(tot); err != nil {
 		return domain.Zero, fmt.Errorf("storage: sum contributions: %w", err)

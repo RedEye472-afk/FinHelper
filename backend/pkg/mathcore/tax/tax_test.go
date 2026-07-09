@@ -304,6 +304,27 @@ func TestDepositTax_2026_KeyRate16(t *testing.T) {
 	}
 }
 
+func TestDepositTax_ProgressiveBrackets_2025(t *testing.T) {
+	// ФЗ-257: deposit interest above the threshold is taxed through the
+	// progressive НДФЛ scale, NOT a flat 13%. With 2025 threshold = 210000
+	// and interest = 10M, taxable = 9.79M:
+	//   2.4M × 0.13 =   312000
+	//   2.6M × 0.15 =   390000   (5M − 2.4M)
+	//   4.79M × 0.18 =  862200   (9.79M − 5M)
+	//   итого 1564200
+	// Under the old flat 13% this would be 9.79M × 0.13 = 1272700, so the
+	// progressive result is strictly higher — the test fails if anyone
+	// reverts to a flat rate.
+	r := MustLoadRules(2025)
+	got, err := DepositTax(r, d("10000000"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !got.Equal(d("1564200")) {
+		t.Errorf("deposit tax 2025 progressive: got %s, want 1564200", got)
+	}
+}
+
 func TestNDFL_DeductionsExceedIncome(t *testing.T) {
 	r := MustLoadRules(2024)
 	got, err := NDFL(r, d("100000"), d("200000"))

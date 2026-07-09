@@ -255,7 +255,7 @@ func TestDeleteGoal_NotFound(t *testing.T) {
 
 func TestSumContributions_Success(t *testing.T) {
 	pool, mock := newMockPool(t)
-	mock.ExpectQuery(q(`SELECT COALESCE\(SUM\(amount\), 0\) FROM goal_contributions`)).
+	mock.ExpectQuery(q(`SELECT COALESCE\(SUM\(gc\.amount\), 0\)`)).
 		WithArgs(int64(7), int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow("75000.00"))
 	got, err := pool.SumContributions(context.Background(), 7, 1)
@@ -269,7 +269,7 @@ func TestSumContributions_Success(t *testing.T) {
 
 func TestSumContributions_None_Zero(t *testing.T) {
 	pool, mock := newMockPool(t)
-	mock.ExpectQuery(q(`SELECT COALESCE\(SUM\(amount\), 0\) FROM goal_contributions`)).
+	mock.ExpectQuery(q(`SELECT COALESCE\(SUM\(gc\.amount\), 0\)`)).
 		WithArgs(int64(7), int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow("0"))
 	got, err := pool.SumContributions(context.Background(), 7, 1)
@@ -278,6 +278,28 @@ func TestSumContributions_None_Zero(t *testing.T) {
 	}
 	if !got.Equal(domain.Zero) {
 		t.Errorf("sum = %s, want 0", got)
+	}
+}
+
+// TestSumContributions_FiltersSoftDeletedGoal verifies the issued SQL JOINs the
+// goals table and filters on g.deleted_at IS NULL, so contributions attached to
+// soft-deleted goals are excluded from the sum. Regression for tech-debt item:
+// SumContributions must not count contributions of deleted goals.
+func TestSumContributions_FiltersSoftDeletedGoal(t *testing.T) {
+	pool, mock := newMockPool(t)
+	// Full query regex: assert JOIN goals + deleted_at IS NULL are present.
+	mock.ExpectQuery(`(?s)SELECT COALESCE\(SUM\(gc\.amount\),\s+0\).*JOIN goals\s+g\s+ON.*g\.deleted_at\s+IS\s+NULL`).
+		WithArgs(int64(7), int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow("0"))
+	got, err := pool.SumContributions(context.Background(), 7, 1)
+	if err != nil {
+		t.Fatalf("SumContributions: %v", err)
+	}
+	if !got.Equal(domain.Zero) {
+		t.Errorf("sum = %s, want 0 (soft-deleted goal contributions must be excluded)", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled sqlmock expectations: %v", err)
 	}
 }
 
