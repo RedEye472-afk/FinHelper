@@ -14,6 +14,7 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/budget"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/deposit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
@@ -35,6 +36,7 @@ type Deps struct {
 	Dashboard      *dashboard.Service
 	Budget         *budget.Service
 	Goals          *goals.Service
+	Deposit        *deposit.Service
 	Credit         *credit.Service
 }
 
@@ -117,6 +119,9 @@ func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
 			}
 			if deps.Goals != nil {
 				NewGoalsHandler(deps.Goals, deps.Logger).Register(r)
+			}
+			if deps.Deposit != nil {
+				NewDepositHandler(deps.Deposit, deps.Logger).Register(r)
 			}
 			if deps.Credit != nil {
 				NewCreditHandler(deps.Credit, deps.Logger).Register(r)

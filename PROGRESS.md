@@ -846,3 +846,89 @@ curl -s --max-time 120 -X POST https://finhelper-frontend.vercel.app/api/v1/auth
 - **Миграции синхронны (60s timeout):** асинхронные миграции приводили к частичной схеме + Vercel λ таймауту. Синхронные с 60s не блокируют λ (укладываются).
 - **`verifySchema` НЕ убивает процесс:** `log.Fatalf` → `log.Printf` (λ продолжает работу с degraded-схемой).
 - **Idempotency-ключи миграций:** `SELECT 1 FROM pg_tables WHERE tablename = 'users'` для 0001 — **недостаточно**. Нужна проверка полной схемы (функция `touch_updated_at()` или список всех обязательных колонок).
+
+## ✅ Фича 6 — Калькулятор вкладов (ВЫПОЛНЕН + ВЕРИФИЦИРОВАН, 09.07)
+
+**Цель:** BUSINESS_LOGIC.md ф.6 — stateless калькулятор вкладов с капитализацией,
+эффективной ставкой, реальной доходностью по Фишеру, налогом и помесячной проекцией — достигнута.
+
+**Файлы созданы:**
+- `backend/pkg/mathcore/deposit/deposit.go` (~256 lines) — чистые формулы:
+  - `Calculate(P, rate, months, capFreq, inflation)` → Result (CapFreq: maturity/annually/quarterly/monthly)
+  - `buildProjection` — помесячная разбивка для графика
+  - Формулы: S = P·(1+i/m)^(m·t) (сложный), S = P·(1+rate·t) (простой)
+  - Эффективная ставка: i_eff = (1+i/m)^m − 1
+  - Фишер: r_real = (1+r_nom)/(1+π) − 1
+  - Источник: MATH_FORMULAS.md §1.1-1.4 (Копнова Гл. 1-2)
+- `backend/pkg/mathcore/deposit/deposit_test.go` — 15 тестов (golden + edge-cases)
+- `backend/pkg/service/deposit/deposit.go` — оркестрация, валидация, tax (НК РФ ст. 214.2)
+- `backend/pkg/service/deposit/deposit_test.go` — 16 тестов
+- `backend/pkg/transport/http/deposit.go` — POST /calc/deposit handler
+- `backend/pkg/transport/http/deposit_test.go` — 5 HTTP-тестов
+
+**Wiring:**
+- `backend/pkg/transport/http/router.go` — `Deps.Deposit *deposit.Service` + `NewDepositHandler.Register(r)`
+- `backend/cmd/server/main.go` — `depositSvc := deposit.NewService()`
+
+**Верификация (09.07):**
+- `go build ./...` → BUILD_OK
+- `go vet ./...` → VET_OK
+- `go test ./...` → **все 22 пакета зелёные** (+mathcore/deposit + service/deposit)
+- Ключевые эталоны:
+  - Monthly cap: 100000 @ 10% × 12m = 110471.31
+  - Simple (mat.): 100000 @ 10% × 6m = 105000.00
+  - Fisher real return: (1.10/1.08) − 1 ≈ 0.01852
+
+**Хорошо:**
+- Роутер зарегистрирован как `POST /api/v1/calc/deposit` — симметрично `/calc/credit` (ф.7) и `/calc/goal` (ф.5)
+- **Налог на вклады** считает порог по ключевой ставке ЦБ (упрощённо: 1M × 0.21)
+- **Disclaimer** всегда присутствует: «Расчёт носит справочный характер. Реальная доходность зависит от условий банка и может отличаться.»
+
+**Плохо / тех. долг:**
+- `TaxYear` использует упрощённую модель НДФЛ (13%), не bracket-движок из tax.NDFL()
+- Ключевая ставка ЦБ захардкожена (0.21 для 2025-2026) — нужен справочник из mathcore/tax/configs
+- HTTP-тесты используют строковые сравнения decimal — могут flaky на разных версиях shopspring
+
+## ✅ Фича 7 — Кредитный калькулятор (ВЫПОЛНЕН, ВЕРИФИЦИРОВАН РАНЕЕ)
+
+**Цель:** BUSINESS_LOGIC.md ф.7 — stateless кредитный калькулятор с аннуитетом,
+дифференцированными платежами, ПСК (ЦБ 5750-У) и досрочным погашением — достигнута ранее.
+
+**Статус:** Полностью реализован на main до начала текущей сессии:
+- `backend/pkg/mathcore/credit/` — annuity, differentiated, PSK, early repayment, BrentQ
+- `backend/pkg/service/credit/` — оркестрация, валидация
+- `backend/pkg/transport/http/credit.go` — POST /calc/credit handler
+- Все тесты зелёные (20 mathcore + service + HTTP)
+
+## 🛠 Инструменты разработки (НАСТРОЕНЫ, 09.07)
+
+| Инструмент | Версия | Статус |
+|-----------|--------|--------|
+| Vercel CLI | v54.21.1 | ✅ глобально |
+| Playwright | v1.61.1 | ✅ глобально + Chromium установлен |
+| puppeteer-extra + stealth | v3.3.6 / v2.11.2 | ✅ глобально |
+| pip: cloudscraper | v1.2.71 | ✅ |
+| pip: deep-translator | v1.11.4 | ✅ |
+| pip: undetected-chromedriver | v3.5.5 | ✅ |
+| npm: cheerio, axios, sharp, file-type, fake-useragent, @vitalets/google-translate-api | — | ✅ глобально |
+
+## ✅ Миграция 0005 — Фикс Vercel partial schema (ВЫПОЛНЕН + ЗАПУШЕН, 09.07)
+
+**Проблема:** Vercel λ применяла 0001 асинхронно с таймаутом 30s → схема частичная.
+Последующие холодные старты пропускали 0001 (проверка `tablename='users'` проходила),
+но `deleted_at` в categories и `touch_updated_at()` отсутствовали → все эндпоинты падали с 500.
+
+**Решение:**
+1. Создан `0005_fix_schema.sql` — идемпотентный DDL (ALTER TABLE ADD COLUMN IF NOT EXISTS + CREATE OR REPLACE FUNCTION)
+2. `migrate.go` усилен: проверка 0001 верифицирует ВСЕ 6 таблиц + функцию `touch_updated_at()` (поле `fn_full_0001_schema`)
+3. `go build` / `go vet` / `go test` — все 22 пакета зелёные
+4. Изменения закоммичены и запущены в origin/main
+
+**Файлы:** `backend/pkg/migrate/migrations/0005_fix_schema.sql` (NEW, 173 строк), `backend/pkg/migrate/migrate.go` (MODIFIED)
+
+| Пакет | Тестов | Статус |
+|------|--------|--------|
+| mathcore/deposit | 15 | ✅ |
+| service/deposit | 16 | ✅ |
+| transport/http (deposit) | 5 | ✅ |
+| **ИТОГО (Phase 4)** | **36** | **✅** |
