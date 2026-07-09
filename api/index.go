@@ -20,6 +20,7 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/deposit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/migrate"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
@@ -95,6 +96,7 @@ func initHandler() http.Handler {
 	budSvc := budget.NewService(pool)
 	goalsSvc := goals.NewService(pool)
 	credSvc := credit.NewService()
+	depSvc := deposit.NewService()
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
@@ -122,6 +124,7 @@ func initHandler() http.Handler {
 		Dashboard:      dashSvc,
 		Budget:         budSvc,
 		Goals:          goalsSvc,
+		Deposit:        depSvc,
 		Credit:         credSvc,
 	}, authMW)
 

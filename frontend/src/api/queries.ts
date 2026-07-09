@@ -151,10 +151,16 @@ export function useGoalProjection(goalId: number, enabled = false) {
   })
 }
 
-// ── Calculators (unchanged) ──
+// ── Calculators ──
 export function useCreditCalc() {
   return useMutation({
     mutationFn: calculatorsApi.calculateCredit,
+  })
+}
+
+export function useDepositCalc() {
+  return useMutation({
+    mutationFn: calculatorsApi.calculateDeposit,
   })
 }
 

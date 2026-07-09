@@ -70,8 +70,38 @@ export interface AffordabilityResponse {
   refused_reason?: string
 }
 
+export interface DepositRequest {
+  principal: string
+  annual_rate?: string
+  term_months: number
+  capitalization?: 'monthly' | 'quarterly' | 'annually' | 'maturity'
+  inflation_rate?: string
+  tax_year?: number
+}
+
+export interface DepositProjectionRow {
+  month: number
+  balance: string
+  interest: string
+  cumulative_interest: string
+}
+
+export interface DepositResponse {
+  maturity_amount: string
+  total_interest: string
+  effective_rate: string
+  real_return?: string
+  tax_amount?: string
+  projection?: DepositProjectionRow[]
+  disclaimer: string
+}
+
 export async function calculateCredit(data: CreditRequest): Promise<CreditResponse> {
   return apiRequest<CreditResponse>('POST', '/api/v1/calc/credit', data)
+}
+
+export async function calculateDeposit(data: DepositRequest): Promise<DepositResponse> {
+  return apiRequest<DepositResponse>('POST', '/api/v1/calc/deposit', data)
 }
 
 export async function calculateAffordability(data: AffordabilityRequest): Promise<AffordabilityResponse> {
