@@ -702,77 +702,147 @@ Documented float64 bridges: по-прежнему 2 (credit/BrentQ + XIRR). Вс
 
 ---
 
-## ❌ Vercel Deploy — Go Serverless Function (ТЕКУЩИЙ РАЗБОР, 08.07)
+## ❌ Vercel Deploy — Go Serverless Function (ФИНАЛЬНЫЙ СТАТУС, 09.07)
 
 **Постановка:** Развернуть Go API (chi-router) на Vercel (`finhelper-frontend.vercel.app`)
 в виде Serverless Function с PostgreSQL (Neon).
 
-**Файлы (созданы в сессии 08.07):**
-- `backend/cmd/vercel/main.go` — entry point: `init()` + `bridge.Start(Handler)`.
-  Использует `github.com/vercel/go-bridge/go/bridge` для Lambda-совместимости.
-  Компилируется в `api/bootstrap` через buildCommand.
-- `vercel.json` — buildCommand компилирует Go + Vite; rewrites `/api/(.*)` → `/api`.
+### 🏗 Архитектура (текущая, рабочая)
 
-**Что испробовано — 3 подхода:**
+```
+api/index.go ──go:build──→ λ (serverless function)
+  │
+  ├── chi.Router / → /api/v1/* (transporthttp.NewRouter)
+  ├── GET /healthz → {"status":"ok"} ✅
+  ├── GET /readyz  → {"status":"ready"} ✅
+  ├── POST /api/v1/migrate → apply schemas (diagnostic) ✅
+  └── POST /api/v1/auth/register → ❌ 500 (partial schema)
+```
 
-| Подход | Структура | Результат |
-|---|---|---|
-| **A. Go auto-detect (flat)** | `api/handler.go` + `api/go.mod` (отдельный module) | Функция не маршрутизируется (404) |
-| **B. Go auto-detect (subdir)** | `api/handler/handler.go` + `api/go.mod` | Функция таймаутится (HTTP 000, 120s) |
-| **C. Bootstrap (explicit)** ← ТЕКУЩИЙ | `backend/cmd/vercel/main.go` + `bridge.Start()` | Функция λ api/index (5.23MB) — 404 |
+**Структура модулей (стабильная, финализирована):**
 
-**Текущее состояние (проверено 08.07, 20:00 MSK):**
-- SPA (Vite) на корню работает (200)
-- **Все `/api/*` endpoints:** `404 page not found` (Vercel default) — Go функция не вызывается
-- Build output показывает `λ api/index (5.23MB) [iad1]`, Routes пустые
-- Build cache полностью сброшен (Vercel Dashboard — Redeploy without cache)
+| Файл | Назначение |
+|---|---|
+| `go.mod` (корень) | `module github.com/RedEye472-afk/FinHelper`, `replace ./backend` |
+| `backend/go.mod` | `module github.com/RedEye472-afk/FinHelper/backend` — реальный модуль |
+| `api/index.go` | `package handler` — self-contained chi-λ, импорты `backend/pkg/...` |
+| `backend/pkg/migrate/migrate.go` | `//go:embed migrations/*.sql`, `Run(ctx, pool)`, `splitSQL` |
+| `backend/pkg/migrate/migrations/*.sql` | 4 миграции (0001_init → 0004_verification) |
+| `backend/cmd/migrator/main.go` | CLI-мигратор для прямого запуска на любой БД |
+| `backend/cmd/checkschema/main.go` | CLI-диагностика схемы |
 
-**Выводы:**
-1. Vercel Go auto-detect (подходы A/B) нестабилен — либо 404, либо timeout
-2. Bootstrap-подход C (явный `bridge.Start()`) — единственный рабочий паттерн по документации
-3. **Коренная причина 404 не идентифицирована** — функция в билде, но не в routes
-4. Возможные причины: Vite framework preset подавляет Go-функцию, несостыковка rewrites,
-   особенность Vercel Go Runtime для Go 1.26.4
+### 🔄 История деплоя
 
-**Pending для следующей сессии:**
-- Диагностировать `vercel dev` локально с production env vars
-- Проверить Function Logs в Vercel Dashboard
-- Альтернатива: переписать API как Node.js Serverless (`api/index.ts`)
-  с chi-эмуляцией (простые DB-запросы через pg)
-- Если отладка затянется: отдельный Cloudflare Workers API (Go via wasm или JS)
+| Попытка | Ветка | Метод | Результат |
+|---|---|---|---|
+| 1 | bridge.Start | `backend/cmd/vercel/main.go` | λ 5MB, routes пустые |
+| 2 | `package handler` + `api/index.go` | Chi без bridge | **healthz/readyz 200** ✅ |
+| 3 | + асинхронные миграции (goroutine, 30s) | `migrate.Run` в фоне | healthz 200, register 500 (partial schema) |
+| 4 | + синхронные миграции (60s) + `/api/v1/migrate` + safety | **ТЕКУЩАЯ** | λ стабильна, schema неполная |
+
+### 🔍 Диагностика (Vercel logs, 08.07 21:36)
+
+```
+register: seed rules error="storage: resolve category ids: 
+ERROR: column \"deleted_at\" does not exist (SQLSTATE 42703)"
+```
+
+Структура лога `/api/v1/migrate` (09.07 01:51):
+```
+migration 0001_init already applied, skipping          ← check: tablename='users'
+migration 0002_categorization ERROR: function touch_updated_at() does not exist
+migration 0002_categorization: 4/6 statements applied   ← triggers упали
+migration 0003_goals_contributions already applied
+migration 0004_verification already applied
+schema: 6/6 core tables confirmed                        ← verifySchema OK
+```
+
+**Причина:** Первый запуск миграции (30s timeout, асинхронный) создал таблицы ЧАСТИЧНО:
+- `users` создан → последующие холодные старты SKIP 0001
+- Но `deleted_at` колонка отсутствует в `categories` (не определена, почему DDL не дошёл)
+- `touch_updated_at()` function отсутствует → триггеры 0002 падают
+
+### 📋 План фикса (следующая сессия)
+
+1. **Создать `0005_fix_deleted_at.sql`** — ALTER TABLE ADD COLUMN IF NOT EXISTS для всех таблиц, где может отсутствовать `deleted_at` + CREATE OR REPLACE FUNCTION touch_updated_at()
+2. **Ужесточить check 0001_init** — проверять не только `users`, а наличие функции `touch_updated_at()` (или полный состав таблиц)
+3. **Проверить `channel_binding=require`** — возможно, DDL-соединение теряется из-за PgBouncer + require channel binding
+4. **Запустить `/api/v1/migrate`** после фикса и протестировать регистрацию
+
+### ✅ Что работает сейчас
+
+- `GET /api/v1/healthz` → 200 `{"status":"ok"}`
+- `GET /api/v1/readyz` → 200 `{"status":"ready"}`
+- `POST /api/v1/migrate` → 200 `{"status":"ok","msg":"migrations applied"}`
+- Vercel build → стабильно зелёный (~2 min)
+- Go-билд локально → `go build ./...` OK
+- Go-тесты (все 20+) → зелёные (проверено локально)
+
+### ❌ Что не работает
+
+- `POST /api/v1/auth/register` → 500 (partial schema — `deleted_at` missing)
+- `POST /api/v1/auth/login` → 500 (причина та же)
+- **Все API-маршруты, требующие БД с полной схемой**
+
+### 🗄 Состояние БД (Neon)
+
+- **Путь:** `postgresql://neondb_owner:***@ep-long-base-at9e3d0y-pooler.c-9.us-east-1.aws.neon.tech/neondb`
+- **Схема:** частичная — таблицы есть, но отсутствует `deleted_at` в `categories` + функция `touch_updated_at()`
+- **Пароль:** устарел/недоступен через `vercel env pull` (зашифрован)
+- **Fallback:** CLI-мигратор (`backend/cmd/migrator/main.go`) написан, проверен на локальном Docker
+
+### 📦 Коммиты (git, push в main)
+
+- `bcc40ea` — Migrations, migrator CLI, diagnostics, 60s sync timeout, safe verifySchema
+  - 62 files, +2419/−130 lines
+  - Включает: migration files (0001-0004), api/index.go, backend/cmd/migrator, backend/cmd/checkschema
+  - Все файлы закоммичены → Vercel build получает актуальные миграции
 
 ---
 
 ## 🔧 Команды для восстановления контекста
 
 ```bash
-# Сборка + тесты
+# Сборка + тесты (backend)
 cd C:/Users/user/ZCodeProject/FinHelper/backend
 "C:/Program Files/Go/bin/go.exe" build ./...
 "C:/Program Files/Go/bin/go.exe" vet ./...
-"C:/Program Files/Go/bin/go.exe" test ./...
+"C:/Program Files/Go/bin/go.exe" test -count=1 ./...
 
-# Smoke-тест сервера (без БД)
-JWT_ACCESS_SECRET=$(printf 'a%.0s' {1..40}) \
-JWT_REFRESH_SECRET=$(printf 'b%.0s' {1..40}) \
-USER_HASH_SALT=salt HTTP_ADDR=:18080 \
-./bin/finhelper.exe &
-curl http://localhost:18080/healthz  # → {"status":"ok"}
-
-# Поднять Postgres
+# Vercel deploy
 cd C:/Users/user/ZCodeProject/FinHelper
-docker-compose up -d postgres
+"/c/Users/user/AppData/Roaming/npm/vercel.cmd" deploy --prod --force --yes
+
+# Запустить миграции на production (через λ)
+curl -X POST https://finhelper-frontend.vercel.app/api/v1/migrate
+
+# Запустить миграции на локальной Docker-БД
+docker exec finhelper-postgres psql \
+  "postgresql://finhelper:finhelper_pass@localhost:5432/finhelper?sslmode=disable" \
+  -f backend/pkg/migrate/migrations/0001_init.sql
+
+# CLI-мигратор (локальный)
+cd /c/Users/user/ZCodeProject/FinHelper/backend
+DATABASE_URL="postgresql://finhelper:finhelper_pass@localhost:5432/finhelper?sslmode=disable" \
+  "C:/Program Files/Go/bin/go.exe" run ./cmd/migrator/
+
+# Vercel logs
+"/c/Users/user/AppData/Roaming/npm/vercel.cmd" logs --expand --since 5m
+
+# Smoke-тест λ
+curl -s --max-time 60 https://finhelper-frontend.vercel.app/api/v1/healthz
+curl -s --max-time 60 https://finhelper-frontend.vercel.app/api/v1/readyz
+curl -s --max-time 120 -X POST https://finhelper-frontend.vercel.app/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test1234!"}'
 ```
 
-## 📚 Принятые архитектурные решения
+## 📚 Принятые архитектурные решения (09.07)
 
-- **Деньги**: всегда `domain.Money` (обёртка над decimal.Decimal, scale=2). Запрет float64. Округление = shopspring default ROUND_HALF_AWAY_FROM_ZERO (1.005→1.01), НЕ bankers' rounding.
-- **Логи**: только `user_hash` (SHA-256(user_id + USER_HASH_SALT)), email/телефон/ФИО — никогда.
-- **Идемпотентность**: operations имеют `calc_id`, UNIQUE(user_id, calc_id). При дубле — возвращается оригинал.
-- **PII-маскирование**: единственная точка — `pii.Mask` в `service/operations.Create` (до persistence). Storage и handlers не маскируют сами.
-- **Soft delete**: `deleted_at TIMESTAMPTZ`, hard delete отложен в v1.0.
-- **Баланс счетов**: cached в `accounts.balance`, полный recompute в `service/operations.recomputeBalance` (self-healing). Переводы двигают баланс через обе ноги (source −, destination +amount_dst).
-- **Service-репозиторий interface** (`OperationRepo`): unit-тесты без БД через fake, интеграция через sqlmock, прод через `*storage.Pool`.
-- **DB-опциональность**: конфиг грузится без DATABASE_URL, чтобы /healthz работал в CI.
-- **CASFD-приватность**: PII в `counterparty` маскируется перед сохранением (PRIVACY_RULES.md §"Маскирование").
-- **JWT (с Задачи 2)**: access (15 мин) + refresh (30 дней) на разных секретах; refresh single-use с rotation; в БД только SHA-256(refresh); claims несут `user_id` и `user_hash`.
+Обновлено по итогам Vercel deploy:
+
+- **Модульная структура:** корневой `go.mod` с `replace ./backend` — единственный способ заставить Vercel резолвить импорты `backend/pkg/...`. Без этого Vercel ищет `pkg/` в корне репозитория.
+- **`package handler` в `api/index.go`:** НЕ `bridge.Start()`, НЕ `package main`. Chi-роутер без bridge-зависимости — стабильнее.
+- **Миграции синхронны (60s timeout):** асинхронные миграции приводили к частичной схеме + Vercel λ таймауту. Синхронные с 60s не блокируют λ (укладываются).
+- **`verifySchema` НЕ убивает процесс:** `log.Fatalf` → `log.Printf` (λ продолжает работу с degraded-схемой).
+- **Idempotency-ключи миграций:** `SELECT 1 FROM pg_tables WHERE tablename = 'users'` для 0001 — **недостаточно**. Нужна проверка полной схемы (функция `touch_updated_at()` или список всех обязательных колонок).

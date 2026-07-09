@@ -23,7 +23,9 @@ func Run(ctx context.Context, pool *storage.Pool) {
 	}{
 		{
 			name:  "0001_init",
-			check: "SELECT 1 FROM pg_tables WHERE tablename = 'users'",
+			// STRICT check: validate full schema (all 6 tables + trigger function + key columns).
+			// The old check only verified tablename='users' which passed even on partial apply.
+			check: "SELECT COUNT(*) FROM (SELECT fn_full_0001_schema() AS ok) sub WHERE ok = TRUE",
 		},
 		{
 			name:  "0002_categorization",
@@ -36,6 +38,12 @@ func Run(ctx context.Context, pool *storage.Pool) {
 		{
 			name:  "0004_verification",
 			check: "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'verified'",
+		},
+		{
+			name:  "0005_fix_schema",
+			// Check: fn_full_0001_schema() is created by 0005 itself.
+			// If already applied — skip.
+			check: "SELECT 1 FROM pg_proc WHERE proname = 'fn_full_0001_schema'",
 		},
 	}
 

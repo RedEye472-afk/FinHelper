@@ -5,5 +5,68 @@
       "repository": "awesomedata/awesome-public-datasets",
       "description": "Используй, когда нужны публичные датасеты по финансам, экономике, налогам, кредитам, депозитам, биржевым данным, недвижимости или любой теме, релевантной для FinHelper"
     }
+  },
+  "permission": {
+    "edit": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": {
+      "git *": "allow",
+      "npm *": "allow",
+      "npx *": "allow",
+      "node *": "allow",
+      "python *": "allow",
+      "pip *": "allow",
+      "*": "ask"
+    },
+    "external_directory": {
+      "*": "allow"
+    },
+    "webfetch": "allow",
+    "websearch": "allow",
+    "todowrite": "allow",
+    "question": "allow"
+  },
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\user\\ZCodeProject\\FinHelper"],
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp"],
+      "enabled": true
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
+    },
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": true,
+      "env": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      }
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    }
+  },
+  "skills": {
+    "urls": [
+      "https://github.com/anthropics/claude-code/tree/main/skills"
+    ]
   }
 }
