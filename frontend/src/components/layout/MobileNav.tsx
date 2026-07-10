@@ -39,17 +39,11 @@ export function MobileNav() {
                 background: isActive ? 'var(--color-primary-50)' : 'transparent',
               })}
             >
-              {({ isActive }) => (
-                <>
-                  <div className="relative">
-                    <Icon size={22} />
-                    {isActive && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{background: 'var(--color-primary-500)'}} />
-                    )}
-                  </div>
-                  <span className="text-[10px] font-medium">{label}</span>
-                </>
-              )}
+              <div className="relative">
+                <Icon size={22} />
+                {/* Active indicator handled by NavLink style */}
+              </div>
+              <span className="text-[10px] font-medium">{label}</span>
             </NavLink>
           ))}
 
@@ -75,17 +69,10 @@ export function MobileNav() {
                 background: isActive ? 'var(--color-primary-50)' : 'transparent',
               })}
             >
-              {({ isActive }) => (
-                <>
-                  <div className="relative">
-                    <Icon size={22} />
-                    {isActive && (
-                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{background: 'var(--color-primary-500)'}} />
-                    )}
-                  </div>
-                  <span className="text-[10px] font-medium">{label}</span>
-                </>
-              )}
+              <div className="relative">
+                <Icon size={22} />
+              </div>
+              <span className="text-[10px] font-medium">{label}</span>
             </NavLink>
           ))}
 
