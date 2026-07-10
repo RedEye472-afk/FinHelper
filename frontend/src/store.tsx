@@ -68,7 +68,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [dashData])
 
   const expensesByCategory = useMemo<CategorySpending[]>(() => {
-    if (!dashData?.by_category || dashData.by_category.length === 0) return FALLBACK_EXPENSES
+    // Для нового пользователя возвращаем пустой массив, а не моки
+    if (!dashData?.by_category || dashData.by_category.length === 0) return []
     return dashData.by_category.map(ec => ({
       category: ec.category_name,
       amount: toDecimal(ec.total),
