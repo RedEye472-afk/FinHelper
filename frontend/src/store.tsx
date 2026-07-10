@@ -1,6 +1,7 @@
 /**
  * store.tsx — FinanceProvider питается от бэкенда через React Query.
  * Деньги обрабатываем через decimal.js (см. lib/money.ts).
+ * Нет фоллбек-данных — новые пользователи видят нули.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useDashboard } from './api/queries'
@@ -37,29 +38,11 @@ const categoryColors: Record<string, string> = {
   'Спорт': '#a855f7', 'Подписки': '#0ea5e9', 'Переводы': '#64748b', 'Прочее': '#6b7280',
 }
 
-/** Fallback mock-данные для отображения когда API недоступен */
-const FALLBACK_KPI: KPI = {
-  totalBalance: M.zero(),
-  monthIncome: toDecimal('150000'),
-  monthExpense: toDecimal('95000'),
-  savingsRate: 37,
-}
-
-const FALLBACK_EXPENSES: CategorySpending[] = [
-  { category: 'Продукты', amount: toDecimal('35000'), color: '#f59e0b' },
-  { category: 'Транспорт', amount: toDecimal('12000'), color: '#3b82f6' },
-  { category: 'Рестораны', amount: toDecimal('18000'), color: '#f97316' },
-  { category: 'Жильё', amount: toDecimal('45000'), color: '#ef4444' },
-  { category: 'Развлечения', amount: toDecimal('8000'), color: '#8b5cf6' },
-  { category: 'Прочее', amount: toDecimal('7000'), color: '#6b7280' },
-]
-
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const { data: dashData, isLoading } = useDashboard()
 
   const kpi = useMemo<KPI>(() => {
-    if (!dashData) return FALLBACK_KPI
-    // Backend returns: { income, expense, net_worth: { net, ... } }
+    if (!dashData) return { totalBalance: M.zero(), monthIncome: M.zero(), monthExpense: M.zero(), savingsRate: 0 }
     const income = toDecimal(dashData.income)
     const expenses = toDecimal(dashData.expense)
     const netWorth = toDecimal(dashData.net_worth.net)
@@ -68,7 +51,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [dashData])
 
   const expensesByCategory = useMemo<CategorySpending[]>(() => {
-    // Для нового пользователя возвращаем пустой массив, а не моки
     if (!dashData?.by_category || dashData.by_category.length === 0) return []
     return dashData.by_category.map(ec => ({
       category: ec.category_name,
