@@ -4,6 +4,7 @@
   "framework": "vite",
   "routes": [
     { "src": "/api/(.*)", "dest": "api/index.go" },
+    { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
