@@ -4,7 +4,7 @@ import { Header } from './Header'
 import { MobileNav } from './MobileNav'
 import { useKeyboard } from '../../hooks/useKeyboard'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
-import { Home, ArrowRightLeft, Target, Settings as SettingsIcon, Wallet, GraduationCap } from 'lucide-react'
+import { Home, ArrowRightLeft, Target, Settings as SettingsIcon, Wallet, GraduationCap, Calculator, CreditCard, PiggyBank } from 'lucide-react'
 
 export function AppLayout() {
   const navigate = useNavigate()
@@ -28,7 +28,12 @@ export function AppLayout() {
     { to: '/goals', icon: Target, label: 'Цели' },
     { to: '/budgets', icon: GraduationCap, label: 'Бюджеты' },
     { to: '/accounts', icon: Wallet, label: 'Счета' },
-    { to: '/settings', icon: SettingsIcon, label: 'Настройки' },
+  ]
+
+  const calculatorItems = [
+    { to: '/deposit', icon: PiggyBank, label: 'Депозитный калькулятор', desc: 'Доходность вклада с капитализацией и налогами', gradient: 'from-emerald-400 to-emerald-600' },
+    { to: '/credit', icon: CreditCard, label: 'Кредитный калькулятор', desc: 'График платежей, ПСК, переплата', gradient: 'from-blue-400 to-blue-600' },
+    { to: '/affordability', icon: Calculator, label: 'Оценка доступности', desc: 'Можно ли позволить ипотеку/кредит', gradient: 'from-violet-400 to-violet-600' },
   ]
 
   return (
@@ -40,7 +45,7 @@ export function AppLayout() {
             <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center text-white font-bold text-sm shadow-md">₽</div>
             <span className="font-semibold text-base" style={{color: 'var(--text-primary)'}}>FinHelper</span>
           </div>
-          <nav className="flex-1 p-3 space-y-1">
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
             {sidebarItems.map(({ to, icon: Icon, label }) => (
               <NavLink key={to} to={to} end={to === '/dashboard'}
                 className={({ isActive }) =>
@@ -56,6 +61,25 @@ export function AppLayout() {
                 <Icon size={18} /> {label}
               </NavLink>
             ))}
+
+            {/* Calculators section */}
+            <div className="pt-4 mt-2 border-t" style={{borderColor: 'var(--border-default)'}}>
+              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{color: 'var(--text-tertiary)'}}>Калькуляторы</p>
+              {calculatorItems.map(({ to, icon: Icon, label, desc, gradient }) => (
+                <NavLink key={to} to={to}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:shadow-md group"
+                  style={{color: 'var(--text-secondary)'}}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${gradient} text-white shrink-0 group-hover:scale-105 transition-transform`}>
+                    <Icon size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate group-hover:text-primary-600">{label}</p>
+                    <p className="text-[10px] truncate text-gray-400 group-hover:text-gray-500">{desc}</p>
+                  </div>
+                </NavLink>
+              ))}
+            </div>
           </nav>
           <div className="p-4 border-t text-[10px] text-center" style={{borderColor: 'var(--border-default)', color: 'var(--text-tertiary)'}}>
             FinHelper v1.0

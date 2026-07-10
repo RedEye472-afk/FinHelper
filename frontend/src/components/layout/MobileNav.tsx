@@ -41,7 +41,7 @@ export function MobileNav() {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`relative ${isActive ? 'animate-float' : ''}`}>
+                  <div className="relative">
                     <Icon size={22} />
                     {isActive && (
                       <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{background: 'var(--color-primary-500)'}} />
@@ -56,7 +56,7 @@ export function MobileNav() {
           {/* Center: FAB */}
           <button
             onClick={() => navigate('/operations/new')}
-            className="relative -top-6 w-14 h-14 rounded-full bg-gradient-primary text-white shadow-2xl flex items-center justify-center hover:shadow-xl transition-all duration-200 btn-press animate-float"
+            className="relative -top-6 w-14 h-14 rounded-full bg-gradient-primary text-white shadow-2xl flex items-center justify-center hover:shadow-xl transition-all duration-200 btn-press"
             style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}
           >
             <Plus size={26} />
@@ -77,7 +77,7 @@ export function MobileNav() {
             >
               {({ isActive }) => (
                 <>
-                  <div className={`relative ${isActive ? 'animate-float' : ''}`}>
+                  <div className="relative">
                     <Icon size={22} />
                     {isActive && (
                       <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{background: 'var(--color-primary-500)'}} />
@@ -96,7 +96,7 @@ export function MobileNav() {
             style={{ color: 'var(--text-tertiary)' }}
           >
             <Calculator size={22} />
-            <span className="text-[10px] font-medium">Кальки</span>
+            <span className="text-[10px] font-medium">Калькуляторы</span>
           </button>
 
           {/* More button */}

@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getAccessToken, clearTokens } from '../api/client'
 import * as authApi from '../api/auth'
 import type { User } from '../types'
@@ -19,11 +18,9 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const navigate = useNavigate()
 
   const refreshUser = useCallback(async () => {
     if (!getAccessToken()) {
-      // MVP: no token -> immediately use demo user
       const demoUser: User = { id: 10, email: 'demo@finhelper.ru', created_at: new Date().toISOString() }
       setUser(demoUser)
       setLoading(false)
@@ -34,7 +31,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u)
     } catch {
       clearTokens()
-      // Fallback to demo user on error
       const demoUser: User = { id: 10, email: 'demo@finhelper.ru', created_at: new Date().toISOString() }
       setUser(demoUser)
     } finally {
@@ -67,8 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     authApi.logout()
     setUser(null)
-    navigate('/login')
-  }, [navigate])
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, logout, refreshUser }}>
