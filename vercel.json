@@ -3,6 +3,7 @@
   "outputDirectory": "frontend/dist",
   "framework": "vite",
   "routes": [
-    { "src": "/api/(.*)", "dest": "api/index.go" }
+    { "src": "/api/(.*)", "dest": "api/index.go" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
