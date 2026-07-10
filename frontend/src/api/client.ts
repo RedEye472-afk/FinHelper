@@ -53,11 +53,6 @@ export async function apiRequest<T>(method: string, path: string, body?: unknown
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (!opts?.skipAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`
 
-  // Rate limiting: don't make network call if not authenticated for authed requests
-  if (!opts?.skipAuth && !isAuthenticated()) {
-    throw new ApiRequestError(401, 'Not authenticated')
-  }
-
   const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined })
 
   if (res.status === 401 && !opts?.skipAuth) {

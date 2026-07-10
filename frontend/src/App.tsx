@@ -6,11 +6,6 @@ import { ToastProvider } from './components/ui/Toast'
 import { ErrorBoundary } from './components/shared/ErrorBoundary'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AppLayout } from './components/layout/AppLayout'
-import { LoginPage } from './pages/Login'
-import { RegisterPage } from './pages/Register'
-import { VerifyEmailPage } from './pages/VerifyEmail'
-import { ForgotPasswordPage } from './pages/ForgotPassword'
-import { ResetPasswordPage } from './pages/ResetPassword'
 import { DashboardPage } from './pages/DashboardPage'
 import { OperationsPage } from './pages/OperationsPage'
 import { OperationsNewPage } from './pages/OperationsNew'
@@ -18,7 +13,6 @@ import { BudgetsPage } from './pages/BudgetsPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AccountsPage } from './pages/AccountsPage'
-import { OnboardingPage } from './pages/OnboardingPage'
 
 // Lazy load heavy calculator pages (KaTeX)
 const DepositPage = lazy(() => import('./pages/DepositPage'))
@@ -46,13 +40,6 @@ export default function App() {
           <ToastProvider>
           <ErrorBoundary>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/onboarding" element={<OnboardingPage />} />
-
             <Route
               element={
                 <ProtectedRoute>

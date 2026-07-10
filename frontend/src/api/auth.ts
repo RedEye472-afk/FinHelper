@@ -81,3 +81,12 @@ export async function getMe(): Promise<User> {
 export function logout() {
   clearTokens()
 }
+
+/**
+ * Demo login for MVP - returns tokens without verification
+ */
+export async function demoLogin(): Promise<{ access_token: string; refresh_token: string }> {
+  return apiRequest<{ access_token: string; refresh_token: string }>(
+    'POST', '/api/v1/auth/demo-login', {}, { skipAuth: true }
+  )
+}

@@ -14,12 +14,17 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/budget"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/credit"
-	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/deposit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/deposit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 )
+
+// RouterMiddleware is an interface that both AuthMiddleware and DemoAuthMiddleware implement.
+type RouterMiddleware interface {
+	Wrap(next http.Handler) http.Handler
+}
 
 // Deps bundles everything the v1 API router needs.
 type Deps struct {
@@ -41,12 +46,12 @@ type Deps struct {
 }
 
 // NewRouter mounts the public and authenticated route groups under /api/v1.
-func NewRouter(deps Deps, mw *AuthMiddleware) http.Handler {
+func NewRouter(deps Deps, mw RouterMiddleware) http.Handler {
 	if deps.Pool == nil || deps.Issuer == nil || deps.Salt == "" || deps.Logger == nil {
 		panic("http: NewRouter requires all deps non-nil/non-empty")
 	}
 	if mw == nil {
-		panic("http: NewRouter requires non-nil AuthMiddleware")
+		panic("http: NewRouter requires non-nil middleware")
 	}
 
 	r := chi.NewRouter()

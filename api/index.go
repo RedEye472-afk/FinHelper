@@ -64,6 +64,10 @@ func initHandler() http.Handler {
 	}
 	log.Println("vercel: lazy pool created (no connection yet)")
 
+	// MVP: use existing user id=10 (samoylov-2006@inbox.ru)
+	demoUserID := int64(10)
+
+	// Create a simple auth issuer for demo tokens
 	issuer, err := auth.NewJWTIssuer(
 		cfg.JWT.AccessSecret, cfg.JWT.RefreshSecret,
 		cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL,
@@ -73,7 +77,8 @@ func initHandler() http.Handler {
 		return buildDegradedRouter("jwt issuer error: " + err.Error())
 	}
 
-	authMW := transporthttp.NewAuthMiddleware(issuer, logger)
+	// MVP: use demo auth middleware that auto-sets demo user
+	demoAuthMW := transporthttp.NewDemoAuthMiddleware(demoUserID, issuer, logger)
 
 	var mailer *email.Sender
 	if cfg.Email.ResendAPIKey != "" || cfg.Email.SendGridAPIKey != "" || cfg.Email.BrevoAPIKey != "" {
@@ -127,7 +132,7 @@ func initHandler() http.Handler {
 		Goals:          goalsSvc,
 		Deposit:        depSvc,
 		Credit:         credSvc,
-	}, authMW)
+	}, demoAuthMW)
 
 	// Healthz: always OK (λ is alive, DB connection is lazy)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {

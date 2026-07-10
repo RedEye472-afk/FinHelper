@@ -7,7 +7,6 @@ import type { User } from '../types'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  /** Login returns the raw response so components can detect requiresVerification. */
   login: (email: string, password: string) => Promise<import('../api/auth').LoginResponse>
   register: (email: string, password: string) => Promise<{ message: string; user_id: number; user_hash: string }>
   verifyEmail: (code: string) => Promise<void>
@@ -20,10 +19,13 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   const refreshUser = useCallback(async () => {
     if (!getAccessToken()) {
-      setUser(null)
+      // MVP: no token -> immediately use demo user
+      const demoUser: User = { id: 10, email: 'demo@finhelper.ru', created_at: new Date().toISOString() }
+      setUser(demoUser)
       setLoading(false)
       return
     }
@@ -32,7 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u)
     } catch {
       clearTokens()
-      setUser(null)
+      // Fallback to demo user on error
+      const demoUser: User = { id: 10, email: 'demo@finhelper.ru', created_at: new Date().toISOString() }
+      setUser(demoUser)
     } finally {
       setLoading(false)
     }
@@ -42,7 +46,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await authApi.login(email, password)
-    // If verified, tokens are already saved and we fetch the user profile.
     if (!data.requires_verification) {
       const u = await authApi.getMe()
       setUser(u)
@@ -64,7 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     authApi.logout()
     setUser(null)
-  }, [])
+    navigate('/login')
+  }, [navigate])
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, logout, refreshUser }}>
