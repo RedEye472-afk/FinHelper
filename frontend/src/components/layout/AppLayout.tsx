@@ -68,7 +68,7 @@ export function AppLayout() {
               {calculatorItems.map(({ to, icon: Icon, label, desc, gradient }) => (
                 <NavLink key={to} to={to}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:shadow-md group"
-                  style={{color: 'var(--text-secondary)'}}
+                  style={{color: 'var(--text-secondary)'}
                 >
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${gradient} text-white shrink-0 group-hover:scale-105 transition-transform`}>
                     <Icon size={16} />
