@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -53,15 +54,37 @@ func OpenLazy(databaseURL string) (*Pool, error) {
 		return nil, fmt.Errorf("storage: DATABASE_URL is empty")
 	}
 
-	cfg, err := pgxpool.ParseConfig(databaseURL)
+	// Add connection tuning for serverless (Vercel λ):
+	// - connect_timeout: fail fast instead of hanging
+	// - prefer_simple_protocol: skip SCRAM-SHA-256 handshake (faster cold start)
+	// - sslmode=require: faster than verify-full (no cert chain validation)
+	connStr := databaseURL
+	if !strings.Contains(connStr, "connect_timeout") {
+		connStr += "&connect_timeout=5"
+	}
+	if !strings.Contains(connStr, "prefer_simple_protocol") {
+		connStr += "&prefer_simple_protocol=true"
+	}
+	if !strings.Contains(connStr, "sslmode=") {
+		connStr += "&sslmode=require"
+	}
+
+	cfg, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
 		return nil, fmt.Errorf("storage: parse database url: %w", err)
 	}
+
+	// Minimal pool for serverless: no idle connections
+	cfg.MaxConns = 5
+	cfg.MinConns = 0
+	cfg.MaxConnLifetime = 5 * time.Minute
+	cfg.MaxConnIdleTime = 30 * time.Second
+
 	db := stdlib.OpenDB(*cfg.ConnConfig)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(5)
+	db.SetMaxIdleConns(0)
 	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(1 * time.Minute)
+	db.SetConnMaxIdleTime(30 * time.Second)
 
 	return &Pool{DB: db}, nil
 }

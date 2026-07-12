@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinHelper — Обзор финансов</title>
+
+  <!-- Google Fonts: Inter + JetBrains Mono for numbers -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* ==========================================================
+       FINHELPER — PREMIUM DARK NEON (#1)
+       Design System: Premium Dark Neon
+       Background:  #0B1020
+       Primary:     #6E56CF
+       Cards:       #141A2D
+       Border:      rgba(255,255,255,0.06)
+       Radius:      20px (cards)
+       Typography:  Inter
+       ========================================================== */
+
+    /* ----- RESET & BASE ----- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* -- Premium Dark Neon Tokens -- */
+      --bg-page: #0B1020;
+      --bg-surface: #141A2D;
+      --bg-surface-hover: #1B2340;
+      --bg-sidebar: #0B0F1A;
+      --bg-sidebar-hover: rgba(255,255,255,0.04);
+      --bg-sidebar-active: rgba(110,86,207,0.12);
+      --bg-hero: linear-gradient(135deg, #141A2D 0%, #1E293B 100%);
+
+      --primary: #6E56CF;
+      --primary-light: rgba(110,86,207,0.12);
+      --primary-glow: rgba(110,86,207,0.3);
+
+      --success: #22C55E;
+      --danger: #F43F5E;
+      --warning: #F59E0B;
+
+      --text-primary: #FFFFFF;
+      --text-secondary: #94A3B8;
+      --text-tertiary: #64748B;
+
+      --border-default: rgba(255,255,255,0.06);
+      --border-hover: rgba(255,255,255,0.12);
+
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+      --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.5);
+      --shadow-hero: 0 8px 32px rgba(0,0,0,0.4);
+      --shadow-sidebar: 4px 0 24px rgba(0,0,0,0.4);
+
+      --radius-card: 20px;
+      --radius-sm: 12px;
+      --radius-xs: 10px;
+      --radius-hero: 20px;
+      --radius-button: 12px;
+      --radius-chart: 16px;
+      --radius-icon: 12px;
+
+      --font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+      --sidebar-width: 240px;
+    }
+
+    html { font-size: 100%; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+    body {
+      font-family: var(--font-family);
+      background: var(--bg-page);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      line-height: 1.5;
+    }
+
+    a { text-decoration: none; color: inherit; }
+    button { border: none; background: none; cursor: pointer; font-family: inherit; color: inherit; }
+
+    /* ----- SCROLLBAR ----- */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+    /* ==========================================================
+       LAYOUT — 12-column grid
+       ========================================================== */
+    .layout { display: flex; width: 100%; min-height: 100vh; }
+
+    /* ==========================================================
+       SIDEBAR — 240px, dark + blur
+       ========================================================== */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: var(--sidebar-width); height: 100vh;
+      background: var(--bg-sidebar);
+      backdrop-filter: blur(20px) saturate(150%);
+      border-right: 1px solid var(--border-default);
+      box-shadow: var(--shadow-sidebar);
+      display: flex; flex-direction: column;
+      z-index: 100;
+      padding: 24px 16px 20px;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 8px 28px;
+      font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+    }
+    .sidebar-logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--primary), #A78BFA);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: #fff;
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+    .sidebar-logo-text { color: var(--text-primary); }
+    .sidebar-logo-dot { color: var(--primary); }
+
+    .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .sidebar-section {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--text-tertiary);
+      padding: 16px 8px 8px;
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius-xs);
+      font-size: 13px; font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .sidebar-item:hover {
+      background: var(--bg-sidebar-hover);
+      color: var(--text-primary);
+    }
+    .sidebar-item.active {
+      background: var(--bg-sidebar-active);
+      color: var(--text-primary);
+    }
+    .sidebar-item.active .sidebar-item-icon { color: var(--primary); }
+    .sidebar-item-icon {
+      width: 20px; height: 20px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sidebar-item-icon svg { width: 20px; height: 20px; stroke-width: 1.5; }
+
+    .sidebar-spacer { flex: 1; }
+
+    .sidebar-toggle {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-xs);
+      font-size: 12px; font-weight: 500;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid var(--border-default);
+    }
+    .sidebar-toggle:hover {
+      background: var(--bg-sidebar-hover);
+      color: var(--text-secondary);
+    }
+    .sidebar-toggle-icon { width: 18px; height: 18px; }
+    .sidebar-toggle-icon svg { width: 18px; height: 18px; stroke-width: 1.5; }
+
+    /* ==========================================================
+       MAIN CONTENT
+       ========================================================== */
+    .main {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      padding: 32px 40px 40px;
+      max-width: calc(100vw - var(--sidebar-width));
+    }
+
+    /* 12-column grid */
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px; }
+    .col-span-12 { grid-column: span 12; }
+    .col-span-8 { grid-column: span 8; }
+    .col-span-6 { grid-column: span 6; }
+    .col-span-4 { grid-column: span 4; }
+    .col-span-3 { grid-column: span 3; }
+
+    /* ----- PAGE HEADER ----- */
+    .page-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 24px;
+    }
+    .page-title {
+      font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+    .page-header-right { display: flex; align-items: center; gap: 12px; }
+
+    .period-selector {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+    }
+    .period-option {
+      padding: 6px 14px; font-size: 13px; font-weight: 500;
+      color: var(--text-tertiary); border-radius: 8px;
+      transition: all 0.2s ease; cursor: pointer;
+    }
+    .period-option:hover { color: var(--text-secondary); background: var(--bg-surface-hover); }
+    .period-option.active { background: var(--primary); color: #fff; }
+
+    .btn-icon {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      transition: all 0.2s ease; cursor: pointer;
+    }
+    .btn-icon:hover { background: var(--bg-surface-hover); border-color: var(--border-hover); }
+    .btn-icon svg { width: 18px; height: 18px; stroke-width: 1.5; }
+
+    /* ==========================================================
+       CARD COMPONENT
+       ========================================================== */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-card);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      transition: all 0.2s ease-out;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-card-hover);
+    }
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .card-badge {
+      font-size: 11px; font-weight: 500; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 20px;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    /* ==========================================================
+       HERO BLOCK
+       ========================================================== */
+    .hero {
+      background: var(--bg-hero);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-hero);
+      padding: 28px 32px;
+      backdrop-filter: blur(20px);
+      display: flex;
+      box-shadow: var(--shadow-hero);
+    }
+    .hero-left { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .hero-label {
+      font-size: 14px; font-weight: 500;
+      color: var(--text-secondary); margin-bottom: 4px;
+    }
+    .hero-balance {
+      font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--text-primary); line-height: 1.1;
+      margin-bottom: 20px;
+    }
+    .hero-balance span { font-family: var(--font-mono); }
+    .hero-metrics {
+      display: flex; gap: 32px;
+    }
+    .hero-metric {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .hero-metric-value {
+      font-size: 16px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hero-metric-value.positive { color: var(--success); }
+    .hero-metric-value.negative { color: var(--danger); }
+    .hero-metric-label {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-tertiary);
+    }
+    .hero-metric-icon {
+      width: 16px; height: 16px;
+    }
+    .hero-metric-icon svg { width: 16px; height: 16px; stroke-width: 2; }
+
+    .hero-right {
+      width: 240px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hero-chart {
+      width: 100%; height: 100px;
+    }
+
+    /* ==========================================================
+       QUICK ACTIONS
+       ========================================================== */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .quick-action {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 16px;
+      padding: 20px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease-out;
+      box-shadow: var(--shadow-card);
+      text-align: center;
+    }
+    .quick-action:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card-hover);
+      border-color: var(--primary-glow);
+    }
+    .quick-action-icon {
+      width: 48px; height: 48px;
+      border-radius: var(--radius-icon);
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .quick-action-icon svg {
+      width: 22px; height: 22px; stroke-width: 1.75;
+    }
+    .quick-action-icon.accent { background: var(--primary-light); color: var(--primary); }
+    .quick-action-icon.success { background: rgba(34,197,94,0.12); color: var(--success); }
+    .quick-action-icon.warning { background: rgba(245,158,11,0.12); color: var(--warning); }
+    .quick-action-icon.info { background: rgba(59,130,246,0.12); color: #60A5FA; }
+
+    .quick-action:hover .quick-action-icon.accent { box-shadow: 0 0 20px var(--primary-glow); }
+    .quick-action:hover .quick-action-icon.success { box-shadow: 0 0 20px rgba(34,197,94,0.3); }
+    .quick-action:hover .quick-action-icon.warning { box-shadow: 0 0 20px rgba(245,158,11,0.3); }
+    .quick-action:hover .quick-action-icon.info { box-shadow: 0 0 20px rgba(59,130,246,0.3); }
+
+    .quick-action-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+    /* ==========================================================
+       METRIC CARDS (2 in row)
+       ========================================================== */
+    .metric-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-card);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      transition: all 0.2s ease-out;
+    }
+    .metric-card:hover { box-shadow: var(--shadow-card-hover); }
+    .metric-label {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-tertiary); margin-bottom: 4px;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .metric-value {
+      font-size: 32px; font-weight: 700; letter-spacing: -0.02em;
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+    }
+    .metric-value.positive { color: var(--success); }
+    .metric-value.negative { color: var(--danger); }
+    .metric-sub {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-tertiary);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .metric-sub svg { width: 14px; height: 14px; }
+
+    /* ==========================================================
+       CHARTS
+       ========================================================== */
+    .chart-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-chart);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      transition: all 0.2s ease-out;
+    }
+    .chart-card:hover { box-shadow: var(--shadow-card-hover); }
+    .chart-container {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Bar chart */
+    .bar-chart {
+      display: flex; align-items: flex-end;
+      gap: 12px; height: 160px;
+      width: 100%;
+      padding-top: 8px;
+    }
+    .bar-group {
+      flex: 1;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px;
+      height: 100%;
+      justify-content: flex-end;
+    }
+    .bar {
+      width: 100%; max-width: 40px;
+      border-radius: 6px 6px 0 0;
+      min-height: 4px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .bar:hover { opacity: 0.8; }
+    .bar-label {
+      font-size: 10px; font-weight: 500;
+      color: var(--text-tertiary);
+      text-transform: uppercase; letter-spacing: 0.02em;
+    }
+
+    /* Donut chart — pure SVG */
+    .donut-container {
+      position: relative;
+      width: 180px; height: 180px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .donut-center {
+      position: absolute;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 0;
+    }
+    .donut-center-value {
+      font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+    .donut-center-label {
+      font-size: 11px; font-weight: 500;
+      color: var(--text-tertiary);
+    }
+
+    .donut-legend {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-left: 20px;
+    }
+    .donut-legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .donut-legend-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .donut-wrapper {
+      display: flex; align-items: center;
+    }
+
+    /* ==========================================================
+       RIGHT PANEL (only for this style — adapted as "Widgets")
+       ========================================================== */
+    .widget-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-card);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+      transition: all 0.2s ease-out;
+    }
+    .widget-card:hover { box-shadow: var(--shadow-card-hover); }
+
+    .widget-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .goal-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .goal-item:last-child { border-bottom: none; }
+    .goal-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .goal-icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
+    .goal-icon.purple { background: var(--primary-light); color: var(--primary); }
+    .goal-icon.green { background: rgba(34,197,94,0.12); color: var(--success); }
+    .goal-icon.blue { background: rgba(59,130,246,0.12); color: #60A5FA; }
+
+    .goal-info { flex: 1; }
+    .goal-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .goal-progress { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+    .goal-progress-bar {
+      flex: 1; height: 4px; background: rgba(255,255,255,0.08);
+      border-radius: 4px; overflow: hidden;
+    }
+    .goal-progress-fill {
+      height: 100%; border-radius: 4px;
+      background: var(--primary);
+      transition: width 0.6s ease;
+    }
+    .goal-progress-fill.green { background: var(--success); }
+    .goal-progress-fill.blue { background: #60A5FA; }
+    .goal-percent { font-size: 11px; font-weight: 600; color: var(--text-secondary); font-family: var(--font-mono); }
+    .goal-amount { font-size: 11px; font-weight: 500; color: var(--text-tertiary); font-family: var(--font-mono); }
+
+    .operation-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .operation-item:last-child { border-bottom: none; }
+    .operation-category {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .operation-category svg { width: 16px; height: 16px; stroke-width: 1.75; }
+    .operation-category.food { background: rgba(245,158,11,0.12); color: var(--warning); }
+    .operation-category.transport { background: rgba(59,130,246,0.12); color: #60A5FA; }
+    .operation-category.entertainment { background: rgba(244,63,94,0.12); color: var(--danger); }
+    .operation-category.shopping { background: rgba(110,86,207,0.12); color: var(--primary); }
+
+    .operation-info { flex: 1; }
+    .operation-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .operation-date { font-size: 11px; font-weight: 400; color: var(--text-tertiary); margin-top: 1px; }
+
+    .operation-amount {
+      font-size: 13px; font-weight: 600; font-family: var(--font-mono);
+    }
+    .operation-amount.negative { color: var(--danger); }
+
+    .widget-link {
+      display: block; text-align: center;
+      font-size: 12px; font-weight: 500; color: var(--primary);
+      padding: 12px 0 0; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .widget-link:hover { color: #A78BFA; }
+
+    /* ==========================================================
+       RESPONSIVE — Tablet 768-1024px
+       ========================================================== */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        width: 64px;
+        padding: 16px 8px;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+        width: var(--sidebar-width);
+      }
+      .sidebar-logo-text { display: none; }
+      .sidebar.open .sidebar-logo-text { display: inline; }
+      .sidebar-item span { display: none; }
+      .sidebar.open .sidebar-item span { display: inline; }
+      .sidebar-section { display: none; }
+      .sidebar.open .sidebar-section { display: block; }
+      .sidebar-toggle span { display: none; }
+      .sidebar.open .sidebar-toggle span { display: inline; }
+      .sidebar-toggle { justify-content: center; }
+      .sidebar.open .sidebar-toggle { justify-content: flex-start; }
+
+      .mobile-menu-btn {
+        display: flex !important;
+      }
+
+      .main {
+        margin-left: 0;
+        padding: 24px 20px;
+        max-width: 100vw;
+      }
+
+      .grid { gap: 16px; }
+
+      .col-span-4, .col-span-8 { grid-column: span 6; }
+      .hero-right { display: none; }
+      .quick-actions { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+      .donut-wrapper { flex-direction: column; align-items: flex-start; gap: 16px; }
+      .donut-legend { margin-left: 0; flex-direction: row; flex-wrap: wrap; }
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      width: 36px; height: 36px;
+      align-items: center; justify-content: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+    .mobile-menu-btn svg { width: 20px; height: 20px; stroke-width: 1.75; }
+
+    /* ==========================================================
+       RESPONSIVE — Mobile <768px
+       ========================================================== */
+    @media (max-width: 768px) {
+      .page-title { font-size: 22px; }
+      .hero { padding: 20px; flex-direction: column; }
+      .hero-balance { font-size: 28px; }
+      .hero-metrics { gap: 16px; flex-wrap: wrap; }
+      .hero-right { display: none; }
+
+      .col-span-3, .col-span-4, .col-span-6, .col-span-8 { grid-column: span 12; }
+
+      .quick-actions {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .quick-action { padding: 16px; }
+      .quick-action-icon { width: 40px; height: 40px; }
+      .quick-action-icon svg { width: 18px; height: 18px; }
+
+      .metric-value { font-size: 26px; }
+
+      .main { padding: 16px 12px 80px; }
+      .page-header { margin-bottom: 16px; }
+      .period-selector { display: none; }
+
+      .donut-container { width: 140px; height: 140px; }
+      .donut-wrapper { flex-direction: column; align-items: center; gap: 12px; }
+      .donut-legend { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+
+      .bar-chart { height: 120px; gap: 8px; }
+    }
+
+    /* ==========================================================
+       SIDEBAR OVERLAY (mobile)
+       ========================================================== */
+    .sidebar-overlay {
+      display: none;
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 99;
+    }
+    .sidebar-overlay.active { display: block; }
+
+    /* ==========================================================
+       ANIMATIONS
+       ========================================================== */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-in {
+      animation: fadeInUp 0.4s ease-out forwards;
+      opacity: 0;
+    }
+    .animate-in:nth-child(1) { animation-delay: 0.05s; }
+    .animate-in:nth-child(2) { animation-delay: 0.10s; }
+    .animate-in:nth-child(3) { animation-delay: 0.15s; }
+    .animate-in:nth-child(4) { animation-delay: 0.20s; }
+    .animate-in:nth-child(5) { animation-delay: 0.25s; }
+    .animate-in:nth-child(6) { animation-delay: 0.30s; }
+    .animate-in:nth-child(7) { animation-delay: 0.35s; }
+    .animate-in:nth-child(8) { animation-delay: 0.40s; }
+    .animate-in:nth-child(9) { animation-delay: 0.45s; }
+
+    /* Bottom nav for mobile */
+    @media (max-width: 768px) {
+      .bottom-nav {
+        display: flex;
+        position: fixed; bottom: 0; left: 0; width: 100%;
+        background: var(--bg-sidebar);
+        backdrop-filter: blur(20px) saturate(150%);
+        border-top: 1px solid var(--border-default);
+        padding: 8px 0 env(safe-area-inset-bottom);
+        z-index: 100;
+      }
+      .bottom-nav-item {
+        flex: 1; display: flex; flex-direction: column; align-items: center;
+        gap: 2px; padding: 6px 0;
+        color: var(--text-tertiary);
+        font-size: 9px; font-weight: 500;
+        cursor: pointer; transition: all 0.2s ease;
+      }
+      .bottom-nav-item.active { color: var(--primary); }
+      .bottom-nav-item svg { width: 20px; height: 20px; stroke-width: 1.5; }
+    }
+    .bottom-nav { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">F</div>
+      <span class="sidebar-logo-text">Fin<span class="sidebar-logo-dot">Helper</span></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-section">Навигация</div>
+      <div class="sidebar-item active" data-icon="layout-dashboard">
+        <span class="sidebar-item-icon" data-lucide="layout-dashboard"></span>
+        <span>Обзор</span>
+      </div>
+      <div class="sidebar-item" data-icon="arrow-right-left">
+        <span class="sidebar-item-icon" data-lucide="arrow-right-left"></span>
+        <span>Операции</span>
+      </div>
+      <div class="sidebar-item" data-icon="target">
+        <span class="sidebar-item-icon" data-lucide="target"></span>
+        <span>Цели</span>
+      </div>
+      <div class="sidebar-item" data-icon="wallet">
+        <span class="sidebar-item-icon" data-lucide="wallet"></span>
+        <span>Бюджеты</span>
+      </div>
+      <div class="sidebar-item" data-icon="calculator">
+        <span class="sidebar-item-icon" data-lucide="calculator"></span>
+        <span>Калькуляторы</span>
+      </div>
+      <div class="sidebar-item" data-icon="settings">
+        <span class="sidebar-item-icon" data-lucide="settings"></span>
+        <span>Настройки</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-toggle" id="hideAmountsToggle">
+      <span class="sidebar-toggle-icon" data-lucide="eye-off"></span>
+      <span>Скрыть суммы</span>
+    </div>
+  </aside>
+
+  <!-- Sidebar overlay (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <!-- Page Header -->
+    <div class="page-header animate-in">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Меню">
+          <i data-lucide="menu"></i>
+        </button>
+        <h1 class="page-title">Обзор</h1>
+      </div>
+      <div class="page-header-right">
+        <div class="period-selector">
+          <span class="period-option">1д</span>
+          <span class="period-option">1н</span>
+          <span class="period-option">1м</span>
+          <span class="period-option active">3м</span>
+          <span class="period-option">1г</span>
+        </div>
+        <button class="btn-icon" aria-label="Уведомления">
+          <i data-lucide="bell"></i>
+        </button>
+        <button class="btn-icon" aria-label="Профиль">
+          <i data-lucide="circle-user"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- ====== 12-COLUMN GRID ====== -->
+    <div class="grid">
+
+      <!-- HERO — full width -->
+      <div class="col-span-12 animate-in">
+        <div class="hero">
+          <div class="hero-left">
+            <div class="hero-label">Общий баланс</div>
+            <div class="hero-balance"><span>1 284 756</span> ₽</div>
+            <div class="hero-metrics">
+              <div class="hero-metric">
+                <div class="hero-metric-value positive">
+                  <span class="hero-metric-icon" data-lucide="trending-up"></span>
+                  +143 200 ₽
+                </div>
+                <div class="hero-metric-label">Доходы за месяц</div>
+              </div>
+              <div class="hero-metric">
+                <div class="hero-metric-value negative">
+                  <span class="hero-metric-icon" data-lucide="trending-down"></span>
+                  −89 450 ₽
+                </div>
+                <div class="hero-metric-label">Расходы за месяц</div>
+              </div>
+            </div>
+          </div>
+          <div class="hero-right">
+            <!-- Decorative area chart -->
+            <svg class="hero-chart" viewBox="0 0 240 100" preserveAspectRatio="none" style="border-radius:12px;">
+              <defs>
+                <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#6E56CF" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#6E56CF" stop-opacity="0.0"/>
+                </linearGradient>
+              </defs>
+              <!-- Area fill -->
+              <path d="M0,80 Q20,60 40,65 Q60,70 80,50 Q100,30 120,35 Q140,40 160,20 Q180,0 200,15 Q220,30 240,10 L240,100 L0,100 Z"
+                    fill="url(#heroAreaGrad)"/>
+              <!-- Line -->
+              <path d="M0,80 Q20,60 40,65 Q60,70 80,50 Q100,30 120,35 Q140,40 160,20 Q180,0 200,15 Q220,30 240,10"
+                    fill="none" stroke="#6E56CF" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+              <!-- Glow dots -->
+              <circle cx="160" cy="20" r="3" fill="#6E56CF" opacity="0.9"/>
+              <circle cx="160" cy="20" r="6" fill="#6E56CF" opacity="0.2"/>
+              <circle cx="240" cy="10" r="3" fill="#A78BFA" opacity="0.9"/>
+              <circle cx="240" cy="10" r="6" fill="#A78BFA" opacity="0.2"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions — 4 columns -->
+      <div class="col-span-12 animate-in">
+        <div class="quick-actions">
+          <div class="quick-action">
+            <div class="quick-action-icon accent"><i data-lucide="plus-circle"></i></div>
+            <span class="quick-action-label">Пополнить</span>
+          </div>
+          <div class="quick-action">
+            <div class="quick-action-icon success"><i data-lucide="send"></i></div>
+            <span class="quick-action-label">Перевести</span>
+          </div>
+          <div class="quick-action">
+            <div class="quick-action-icon warning"><i data-lucide="credit-card"></i></div>
+            <span class="quick-action-label">Оплатить</span>
+          </div>
+          <div class="quick-action">
+            <div class="quick-action-icon info"><i data-lucide="bar-chart-3"></i></div>
+            <span class="quick-action-label">Аналитика</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics — 2 in row -->
+      <div class="col-span-6 animate-in">
+        <div class="metric-card">
+          <div class="metric-label">Норма сбережений</div>
+          <div class="metric-value positive">37.5%</div>
+          <div class="metric-sub">
+            <span class="hero-metric-icon" data-lucide="trending-up"></span>
+            +2.3% к прошлому месяцу
+          </div>
+        </div>
+      </div>
+      <div class="col-span-6 animate-in">
+        <div class="metric-card">
+          <div class="metric-label">Изменение за месяц</div>
+          <div class="metric-value positive">+53 750 ₽</div>
+          <div class="metric-sub">
+            <span class="hero-metric-icon" data-lucide="trending-up"></span>
+            +4.4% к прошлому месяцу
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar Chart — Бюджет по категориям -->
+      <div class="col-span-6 animate-in">
+        <div class="chart-card">
+          <div class="card-header">
+            <div class="card-title">Бюджет по категориям</div>
+            <div class="card-badge">план</div>
+          </div>
+          <div class="chart-container">
+            <div class="bar-chart">
+              <div class="bar-group">
+                <div class="bar" style="height:85%;background:linear-gradient(180deg,#6E56CF,#8B6FE8);"></div>
+                <span class="bar-label">Продукты</span>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:65%;background:linear-gradient(180deg,#F59E0B,#FBBF24);"></div>
+                <span class="bar-label">Транспорт</span>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:45%;background:linear-gradient(180deg,#3B82F6,#60A5FA);"></div>
+                <span class="bar-label">Жильё</span>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:70%;background:linear-gradient(180deg,#22C55E,#4ADE80);"></div>
+                <span class="bar-label">Развлеч.</span>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:50%;background:linear-gradient(180deg,#F43F5E,#FB7185);"></div>
+                <span class="bar-label">Здоровье</span>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:30%;background:linear-gradient(180deg,#A78BFA,#C4B5FD);"></div>
+                <span class="bar-label">Образов.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Donut Chart — Расходы по категориям -->
+      <div class="col-span-6 animate-in">
+        <div class="chart-card">
+          <div class="card-header">
+            <div class="card-title">Расходы по категориям</div>
+            <div class="card-badge">факт</div>
+          </div>
+          <div class="chart-container">
+            <div class="donut-wrapper">
+              <div class="donut-container">
+                <svg width="180" height="180" viewBox="0 0 180 180">
+                  <!-- Donut segments — circumference = 2*pi*72 ≈ 452.39 -->
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="24"/>
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="#6E56CF" stroke-width="24"
+                          stroke-dasharray="158.3 294.1" stroke-dashoffset="0" stroke-linecap="round"
+                          transform="rotate(-90, 90, 90)"/>
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="#F59E0B" stroke-width="24"
+                          stroke-dasharray="90.5 361.9" stroke-dashoffset="-158.3" stroke-linecap="round"
+                          transform="rotate(-90, 90, 90)"/>
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="#F43F5E" stroke-width="24"
+                          stroke-dasharray="67.9 384.5" stroke-dashoffset="-248.8" stroke-linecap="round"
+                          transform="rotate(-90, 90, 90)"/>
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="#22C55E" stroke-width="24"
+                          stroke-dasharray="45.2 407.2" stroke-dashoffset="-316.7" stroke-linecap="round"
+                          transform="rotate(-90, 90, 90)"/>
+                  <circle cx="90" cy="90" r="72" fill="none" stroke="#3B82F6" stroke-width="24"
+                          stroke-dasharray="45.2 407.2" stroke-dashoffset="-361.9" stroke-linecap="round"
+                          transform="rotate(-90, 90, 90)"/>
+                </svg>
+                <div class="donut-center">
+                  <span class="donut-center-value">89.5</span>
+                  <span class="donut-center-label">тыс. ₽</span>
+                </div>
+              </div>
+              <div class="donut-legend">
+                <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#6E56CF;"></span>Продукты 35%</div>
+                <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#F59E0B;"></span>Транспорт 20%</div>
+                <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#F43F5E;"></span>Развлечения 15%</div>
+                <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#22C55E;"></span>Здоровье 10%</div>
+                <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#3B82F6;"></span>Прочее 10%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel — Active Goals -->
+      <div class="col-span-6 animate-in">
+        <div class="widget-card">
+          <div class="widget-title">Активные цели</div>
+          <div class="goal-item">
+            <div class="goal-icon purple"><i data-lucide="car"></i></div>
+            <div class="goal-info">
+              <div class="goal-name">Новый автомобиль</div>
+              <div class="goal-progress">
+                <div class="goal-progress-bar">
+                  <div class="goal-progress-fill" style="width:45%"></div>
+                </div>
+                <span class="goal-percent">45%</span>
+              </div>
+              <div class="goal-amount">1 350 000 / 3 000 000 ₽</div>
+            </div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-icon green"><i data-lucide="home"></i></div>
+            <div class="goal-info">
+              <div class="goal-name">Первый взнос ипотека</div>
+              <div class="goal-progress">
+                <div class="goal-progress-bar">
+                  <div class="goal-progress-fill green" style="width:28%"></div>
+                </div>
+                <span class="goal-percent">28%</span>
+              </div>
+              <div class="goal-amount">840 000 / 3 000 000 ₽</div>
+            </div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-icon blue"><i data-lucide="plane"></i></div>
+            <div class="goal-info">
+              <div class="goal-name">Путешествие</div>
+              <div class="goal-progress">
+                <div class="goal-progress-bar">
+                  <div class="goal-progress-fill blue" style="width:72%"></div>
+                </div>
+                <span class="goal-percent">72%</span>
+              </div>
+              <div class="goal-amount">180 000 / 250 000 ₽</div>
+            </div>
+          </div>
+          <div class="widget-link">Все цели →</div>
+        </div>
+      </div>
+
+      <!-- Right Panel — Recent Operations -->
+      <div class="col-span-6 animate-in">
+        <div class="widget-card">
+          <div class="widget-title">Последние операции</div>
+          <div class="operation-item">
+            <div class="operation-category food"><i data-lucide="shopping-bag"></i></div>
+            <div class="operation-info">
+              <div class="operation-name">Продуктовый магазин</div>
+              <div class="operation-date">Сегодня, 14:23</div>
+            </div>
+            <div class="operation-amount negative">−3 250 ₽</div>
+          </div>
+          <div class="operation-item">
+            <div class="operation-category transport"><i data-lucide="car"></i></div>
+            <div class="operation-info">
+              <div class="operation-name">Яндекс Такси</div>
+              <div class="operation-date">Сегодня, 11:05</div>
+            </div>
+            <div class="operation-amount negative">−890 ₽</div>
+          </div>
+          <div class="operation-item">
+            <div class="operation-category entertainment"><i data-lucide="film"></i></div>
+            <div class="operation-info">
+              <div class="operation-name">Кинопоиск</div>
+              <div class="operation-date">Вчера, 19:42</div>
+            </div>
+            <div class="operation-amount negative">−499 ₽</div>
+          </div>
+          <div class="operation-item">
+            <div class="operation-category shopping"><i data-lucide="shopping-cart"></i></div>
+            <div class="operation-info">
+              <div class="operation-name">Wildberries</div>
+              <div class="operation-date">Вчера, 15:10</div>
+            </div>
+            <div class="operation-amount negative">−5 780 ₽</div>
+          </div>
+          <div class="widget-link">Все операции →</div>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+  </main>
+</div>
+
+<!-- Bottom Nav (mobile) -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-item active"><i data-lucide="layout-dashboard"></i><span>Обзор</span></div>
+  <div class="bottom-nav-item"><i data-lucide="arrow-right-left"></i><span>Операции</span></div>
+  <div class="bottom-nav-item"><i data-lucide="target"></i><span>Цели</span></div>
+  <div class="bottom-nav-item"><i data-lucide="wallet"></i><span>Бюджеты</span></div>
+  <div class="bottom-nav-item"><i data-lucide="settings"></i><span>Ещё</span></div>
+</nav>
+
+<script>
+  // ===== Lucide Icons =====
+  lucide.createIcons();
+
+  // ===== Mobile sidebar toggle =====
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const menuBtn = document.getElementById('mobileMenuBtn');
+
+  function toggleSidebar() {
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('active');
+    document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+  }
+
+  if (menuBtn) {
+    menuBtn.addEventListener('click', toggleSidebar);
+    overlay.addEventListener('click', toggleSidebar);
+  }
+
+  // ===== "Hide amounts" toggle =====
+  const hideToggle = document.getElementById('hideAmountsToggle');
+  let amountsHidden = false;
+
+  function toggleAmounts() {
+    amountsHidden = !amountsHidden;
+    const balances = document.querySelectorAll('.hero-balance, .metric-value, .goal-amount, .operation-amount, .donut-center-value');
+    balances.forEach(el => {
+      if (amountsHidden) {
+        el.dataset.originalText = el.textContent;
+        el.textContent = '***';
+        el.style.filter = 'blur(4px)';
+        el.style.transition = 'filter 0.2s ease';
+      } else {
+        el.textContent = el.dataset.originalText || el.textContent;
+        el.style.filter = 'none';
+      }
+    });
+    // Update the toggle icon
+    const iconSpan = hideToggle.querySelector('.sidebar-toggle-icon');
+    if (iconSpan) {
+      const iconName = amountsHidden ? 'eye' : 'eye-off';
+      iconSpan.innerHTML = `<i data-lucide="${iconName}"></i>`;
+      lucide.createIcons();
+    }
+  }
+
+  if (hideToggle) {
+    hideToggle.addEventListener('click', toggleAmounts);
+  }
+
+  // ===== Period selector =====
+  document.querySelectorAll('.period-option').forEach(opt => {
+    opt.addEventListener('click', function() {
+      document.querySelectorAll('.period-option').forEach(o => o.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // ===== Responsive sidebar: close on desktop resize =====
+  function handleResize() {
+    if (window.innerWidth > 1024) {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  }
+  window.addEventListener('resize', handleResize);
+
+  console.log('FinHelper Dashboard v1.0 — Premium Dark Neon');
+  console.log('Style: Premium Dark Neon (#1)');
+  console.log('Grid: 12-col, 24px gutter');
+  console.log('No PII data in logs ✓');
+</script>
+
+</body>
+</html>
