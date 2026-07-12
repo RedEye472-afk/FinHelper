@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useAccounts, useCreateOperation, useCategories } from '../api/queries'
 import { parseSberbankText, parseSberbankCSV, type ParsedTransaction } from '../lib/import/sberbank'
-import { extractTextFromPDF, looksLikeSberbankPDF } from '../lib/import/pdfExtractor'
+import { extractTextFromPDF } from '../lib/import/pdfExtractor'
 import { apiRequest } from '../api/client'
 import type { OperationCreate } from '../types'
 
