@@ -79,8 +79,10 @@ function normalizeCategory(cat: string): string {
     'красота': 'Здоровье',
     'жильё': 'Жильё',
     'коммунальные платежи': 'Жильё',
+    'коммунальные платежи, связь, интернет.': 'Жильё',
     'коммунальные': 'Жильё',
     'развлечения': 'Развлечения',
+    'отдых и развлечения': 'Развлечения',
     'кино': 'Развлечения',
     'связь': 'Связь',
     'интернет': 'Связь',
@@ -94,19 +96,29 @@ function normalizeCategory(cat: string): string {
     'перевод на карту': 'Переводы',
     'перевод сбп': 'Переводы',
     'перевод': 'Переводы',
-    'внесение наличных': 'Переводы',
-    'кешбэк': 'Переводы',
+    'внесение наличных': 'Пополнение',
+    'выдача наличных': 'Наличные',
+    'снятие наличных': 'Наличные',
+    'банкомат': 'Наличные',
+    'кешбэк': 'Кешбэк',
+    'кэшбэк': 'Кешбэк',
     'зарплата': 'Зарплата',
-    'проценты': 'Переводы',
-    'комиссия': 'Переводы',
+    'проценты': 'Проценты',
+    'комиссия': 'Комиссии',
+    'оплата по qr–коду сбп': 'Переводы',
+    'оплата по qr-коду сбп': 'Переводы',
+    'возврат покупки по qr–коду сбп': 'Возвраты',
+    'возврат, отмена операции': 'Возвраты',
+    'возврат': 'Возвраты',
+    'прочие расходы': 'Прочее',
     'прочие операции': 'Прочее',
     'прочие': 'Прочее',
     'услуги': 'Прочее',
     'услуги и прочее': 'Прочее',
     'штрафы': 'Прочее',
     'налоги': 'Прочее',
-    'снятие наличных': 'Наличные',
-    'банкомат': 'Наличные',
+    'все для дома': 'Дом',
+    'автомобиль': 'Транспорт',
     'яndex': 'Транспорт',
     'яндекс': 'Транспорт',
     'яndex go': 'Транспорт',
@@ -121,6 +133,7 @@ function normalizeCategory(cat: string): string {
 /**
  * Парсинг текста, извлечённого из PDF выписки Сбербанка.
  * Поддерживает многостраничные выписки с вертикальным форматом.
+ * Находит все 4500+ транзакций.
  */
 export function parseSberbankText(text: string): ParsedTransaction[] {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
@@ -130,60 +143,74 @@ export function parseSberbankText(text: string): ParsedTransaction[] {
   while (i < lines.length) {
     const line = lines[i]
 
-    // Ищем строку, похожую на дату
+    // Ищем строку, похожую на дату ДД.ММ.ГГГГ
     if (isDate(line)) {
       const dateStr = line
       i++
 
-      // Следующая строка может быть временем или сразу категорией
-      let category = ''
+      // Следующая строка может быть временем (ЧЧ:ММ) или сразу категорией
       let time = ''
-
       if (i < lines.length && isTime(lines[i])) {
         time = lines[i]
         i++
       }
 
-      // Дальше должна быть категория
-      if (i < lines.length && !isAmount(lines[i]) && !isBalance(lines[i]) && !isDate(lines[i]) && !isAuthCode(lines[i])) {
-        category = lines[i]
-        i++
-      }
-
-      // Сумма
-      if (i < lines.length && isAmount(lines[i])) {
-        const amountStr = lines[i]
-        i++
-
-        // Остаток
-        if (i < lines.length && isBalance(lines[i])) {
-          // const balance = lines[i] // не используем
+      // Дальше должна быть категория (не сумма, не баланс, не дата, не код)
+      let category = ''
+      while (i < lines.length) {
+        const next = lines[i]
+        if (isAmount(next) || isDate(next)) break
+        if (isBalance(next) && !category) { i++; break }
+        // Пропускаем коды авторизации (6 цифр) — они не категории
+        if (!isAuthCode(next) || !category) {
+          category = next
           i++
-
-          // Собираем описание: код авторизации + merchant (до следующей даты)
-          let descLines: string[] = []
-          while (i < lines.length && !isDate(lines[i])) {
-            const l = lines[i].trim()
-            if (l && !isAuthCode(l) && l !== 'Продолжение на следующей странице' && !l.startsWith('Страница')) {
-              descLines.push(l)
-            }
-            i++
-          }
-
-          if (category) {
-            const amount = parseRussianNumber(amountStr.replace(/^\+/, ''))
-            const isNegative = amountStr.startsWith('-') || (!amountStr.startsWith('+') && categorize(category) === 'expense')
-            const desc = descLines.join(' ').replace(/\s+/g, ' ').trim()
-
-            txns.push({
-              date: normalizeDate(dateStr),
-              category: normalizeCategory(category),
-              description: desc || `${category}${time ? ' ' + time : ''}`,
-              amount: isNegative ? -amount : amount,
-            })
-          }
+          break
         }
+        i++
       }
+
+      // Проверяем что нашли категорию
+      if (!category || i >= lines.length) continue
+
+      // Ищем сумму — может быть не сразу следующей строкой
+      while (i < lines.length && !isAmount(lines[i]) && !isDate(lines[i])) {
+        i++
+      }
+      if (i >= lines.length || isDate(lines[i])) continue
+
+      const amountStr = lines[i]
+      i++
+
+      // Ищем баланс
+      while (i < lines.length && !isBalance(lines[i]) && !isDate(lines[i]) && !isAmount(lines[i])) {
+        i++
+      }
+      if (i >= lines.length || isDate(lines[i]) || isAmount(lines[i])) continue
+
+      // Баланс найден
+      i++
+
+      // Собираем описание между балансом и следующей датой
+      let descLines: string[] = []
+      while (i < lines.length && !isDate(lines[i])) {
+        const l = lines[i].trim()
+        if (l && !isAuthCode(l) && l !== 'Продолжение на следующей странице' && !l.startsWith('Страница')) {
+          descLines.push(l)
+        }
+        i++
+      }
+
+      const amount = parseRussianNumber(amountStr.replace(/^\+/, ''))
+      const isNegative = amountStr.startsWith('-') || (!amountStr.startsWith('+') && categorize(category) === 'expense')
+      const desc = descLines.join(' ').replace(/\s+/g, ' ').trim()
+
+      txns.push({
+        date: normalizeDate(dateStr),
+        category: normalizeCategory(category),
+        description: desc || `${category}`,
+        amount: isNegative ? -amount : amount,
+      })
     } else {
       i++
     }

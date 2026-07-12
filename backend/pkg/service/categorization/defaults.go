@@ -72,9 +72,15 @@ var SystemCategories = []string{
 // high-signal merchant tokens, not generic words (avoid "кофе" which matches
 // too much; use merchant names instead).
 var SystemKeywordRules = []KeywordDefault{
-	// Продукты
+	// Продукты — Сбербанк мерчанты из выписки
 	{Keyword: "магнит", Category: "Продукты"},
+	{Keyword: "magnit", Category: "Продукты"},
 	{Keyword: "пятерочк", Category: "Продукты"},
+	{Keyword: "pyaterochka", Category: "Продукты"},
+	{Keyword: "красное", Category: "Продукты"},
+	{Keyword: "krasnoe", Category: "Продукты"},
+	{Keyword: "gulliver", Category: "Продукты"},
+	{Keyword: "fixprice", Category: "Продукты"},
 	{Keyword: "перекрест", Category: "Продукты"},
 	{Keyword: "ашан", Category: "Продукты"},
 	{Keyword: "лента", Category: "Продукты"},
