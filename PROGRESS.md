@@ -38,7 +38,8 @@
 | 9. Трекер целей (ф.5) | `service/goals` (18 задач, CRUD+proj+simulate) | 83 | ✅ |
 | 10. Кредитный калькулятор (ф.7) | `service/credit` + mathcore | ~40 | ✅ |
 | 11. **Калькулятор вкладов (ф.6)** | **`service/deposit` + mathcore + HTTP + frontend** | **36** | **✅ (09.07)** |
-| 12. Фронтенд: DepositPage → backend API | `DepositPage.tsx` был client-side, теперь `useDepositCalc` | — | ✅ (09.07) |
+| 12. Backend + Frontend: деплой на Vercel | `frontend/` + `api/index.go` | — | ✅ (12.07) |
+| 13. Импорт выписок Сбербанк PDF | `frontend/src/lib/import/`, `ImportPage`, `scripts/pdf_parse.py`, `backend/internal/handler/pdf_parse.go` | — | ✅ (12.07) |
 
 **Total Go test packages:** 22 (все зелёные, проверено 09.07). **Documented float64 bridges:** 2.
 
@@ -60,12 +61,16 @@
 
 ---
 
-## 🚀 Vercel Deploy — текущее состояние (09.07)
+## 🚀 Vercel Deploy — текущее состояние (12.07)
 
 ### ✅ Работает
-- Frontend SPA: `https://finhelper-frontend.vercel.app` (Vite build, 2847 modules)
-- Go λ: `api/index.go` (chi-router, 5.41MB), `/healthz` и `/readyz` отвечают
+- Frontend SPA: `https://finhelper-frontend.vercel.app` (Vite build, 2281 modules)
+- Go λ: `api/index.go` (chi-router), `/healthz` и `/readyz` отвечают
 - Build: стабильно зелёный (~2 min). `go build/vet/test` — локально зелёные.
+- **Premium Dark Neon** тема (#0B1020 bg, #6E56CF primary)
+- **Banking-style UI**: bottom nav, сайдбар, страницы Операции/Цели/Бюджеты/Настройки
+- **Импорт выписок**: PDF (через pdf.js + py-pdf-parser) и CSV, массовый импорт
+- **Счета**: создание/удаление, типы счетов с иконками
 
 ### ❌ Что не работает
 - **Neon DB connection таймаутит из Vercel λ.** Функция не отвечает (ни degraded mode, ничего).

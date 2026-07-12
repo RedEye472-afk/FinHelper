@@ -12,6 +12,8 @@ import { OperationsNewPage } from './pages/OperationsNew'
 import { BudgetsPage } from './pages/BudgetsPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ImportPage } from './pages/ImportPage'
+import { MorePage } from './pages/MorePage'
 import { AccountsPage } from './pages/AccountsPage'
 
 // Lazy load heavy calculator pages (KaTeX)
@@ -53,6 +55,8 @@ export default function App() {
               <Route path="/budgets" element={<BudgetsPage />} />
               <Route path="/goals" element={<GoalsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/import" element={<ImportPage />} />
+              <Route path="/more" element={<MorePage />} />
               <Route path="/accounts" element={<AccountsPage />} />
               <Route path="/deposit" element={<LazyPage><DepositPage /></LazyPage>} />
               <Route path="/credit" element={<LazyPage><CreditPage /></LazyPage>} />

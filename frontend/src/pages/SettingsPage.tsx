@@ -1,123 +1,156 @@
 import { useSettings } from '../hooks/useSettings'
 import { useAuth } from '../context/AuthContext'
-import { Eye, EyeOff, LogOut, Keyboard, Check } from 'lucide-react'
+import { Eye, EyeOff, LogOut, Keyboard, Moon, Sun, Palette } from 'lucide-react'
 import { DataExportImport } from '../components/shared/DataExportImport'
 import type { ThemeMode, Currency } from '../types'
 
-const themes: { id: ThemeMode; label: string; gradient: string; colors: string[] }[] = [
-  { id: 'emerald', label: 'Изумрудная', gradient: 'linear-gradient(135deg, #059669, #10b981, #34d399)', colors: ['#059669', '#10b981', '#34d399'] },
-  { id: 'blue', label: 'Океан', gradient: 'linear-gradient(135deg, #1e3a8a, #2563eb, #60a5fa)', colors: ['#1e3a8a', '#2563eb', '#60a5fa'] },
-  { id: 'purple', label: 'Фиолетовая', gradient: 'linear-gradient(135deg, #4c1d95, #7c3aed, #a78bfa)', colors: ['#4c1d95', '#7c3aed', '#a78bfa'] },
-  { id: 'dark', label: 'Ночь', gradient: 'linear-gradient(135deg, #0f172a, #1e293b, #334155)', colors: ['#0f172a', '#1e293b', '#334155'] },
+const themes: { id: ThemeMode; label: string; color: string }[] = [
+  { id: 'emerald', label: 'Изумрудная', color: '#10b981' },
+  { id: 'blue', label: 'Океан', color: '#3b82f6' },
+  { id: 'purple', label: 'Фиолетовая', color: '#8b5cf6' },
+  { id: 'dark', label: 'Ночь', color: '#6E56CF' },
 ]
 
-const currencies: { id: Currency; label: string }[] = [
-  { id: 'RUB', label: 'Российский рубль (₽)' },
-  { id: 'USD', label: 'Доллар США ($)' },
-  { id: 'EUR', label: 'Евро (€)' },
+const currencies: { id: Currency; label: string; symbol: string }[] = [
+  { id: 'RUB', label: 'Российский рубль', symbol: '₽' },
+  { id: 'USD', label: 'Доллар США', symbol: '$' },
+  { id: 'EUR', label: 'Евро', symbol: '€' },
 ]
 
 export function SettingsPage() {
-  const { theme, currency, hideBalance, setSettings } = useSettings()
+  const { theme, currency, hideBalance, setSettings, initials, name, email } = useSettings()
   const { user, logout } = useAuth()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+
+      {/* User card */}
+      <div className="rounded-[20px] border p-5 text-center relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, #141A2D 0%, #1E293B 100%)',
+          borderColor: 'rgba(255,255,255,0.06)',
+        }}
+      >
+        <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-white text-xl font-bold"
+          style={{
+            background: 'linear-gradient(135deg, #6E56CF 0%, #A78BFA 100%)',
+            boxShadow: '0 0 24px rgba(110,86,207,0.3)',
+          }}>
+          {initials}
+        </div>
+        <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{name}</p>
+        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{user?.email || email}</p>
+      </div>
+
       {/* Theme */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Тема оформления</h3>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="rounded-[20px] border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Palette size={16} style={{ color: 'var(--text-tertiary)' }} />
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Тема оформления</p>
+        </div>
+        <div className="flex gap-3">
           {themes.map(t => (
             <button key={t.id} onClick={() => setSettings({ theme: t.id })}
-              className={`p-4 rounded-2xl border-2 transition-all text-left ${theme === t.id ? 'shadow-md' : 'hover:shadow-sm'}`}
-              style={theme === t.id
-                ? { borderColor: 'var(--color-primary-500)', background: 'var(--bg-surface)' }
-                : { borderColor: 'var(--border-default)', background: 'var(--bg-surface)' }
-              }>
-              <div className="h-10 rounded-lg mb-3" style={{ background: t.gradient }} />
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t.label}</p>
-                {theme === t.id && <Check size={16} style={{ color: 'var(--color-primary-600)' }} />}
-              </div>
+              className="flex-1 flex flex-col items-center gap-2 py-3 rounded-xl transition-all btn-press"
+              style={{
+                background: theme === t.id ? `${t.color}18` : 'transparent',
+                border: theme === t.id ? `2px solid ${t.color}` : '2px solid transparent',
+              }}>
+              <div className="w-8 h-8 rounded-full" style={{ background: t.color }} />
+              <span className="text-[11px] font-medium" style={{ color: theme === t.id ? t.color : 'var(--text-secondary)' }}>
+                {t.label}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Currency */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Валюта</h3>
-        <div className="space-y-2">
+      <div className="rounded-[20px] border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Валюта</p>
+        <div className="flex gap-2">
           {currencies.map(c => (
             <button key={c.id} onClick={() => setSettings({ currency: c.id })}
-              className="w-full flex items-center justify-between p-3 rounded-xl border transition-all"
-              style={currency === c.id
-                ? { borderColor: 'var(--color-primary-500)', background: 'rgba(16,185,129,0.08)' }
-                : { borderColor: 'var(--border-default)', background: 'var(--bg-surface)' }
-              }>
-              <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{c.label}</span>
-              {currency === c.id && <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs" style={{ background: 'var(--color-primary-500)' }}>✓</div>}
+              className="flex-1 py-3 rounded-xl text-sm font-medium transition-all btn-press"
+              style={{
+                background: currency === c.id ? 'rgba(110,86,207,0.12)' : 'transparent',
+                border: currency === c.id ? '1px solid rgba(110,86,207,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                color: currency === c.id ? 'var(--color-primary-400)' : 'var(--text-secondary)',
+              }}>
+              <span className="text-lg">{c.symbol}</span>
+              <p className="text-[10px] mt-0.5">{c.label.split(' ').pop()}</p>
             </button>
           ))}
         </div>
       </div>
 
       {/* Balance visibility */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Отображение баланса</h3>
+      <div className="rounded-[20px] border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Отображение баланса</p>
         <button onClick={() => setSettings({ hideBalance: !hideBalance })}
-          className="w-full flex items-center justify-between p-3 rounded-xl border transition-all"
-          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-surface)' }}>
+          className="w-full flex items-center justify-between py-2 rounded-xl transition-all">
           <div className="flex items-center gap-3">
             {hideBalance
               ? <EyeOff size={20} style={{ color: 'var(--text-tertiary)' }} />
-              : <Eye size={20} style={{ color: 'var(--color-primary-500)' }} />}
-            <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{hideBalance ? 'Скрыт' : 'Виден'}</span>
+              : <Eye size={20} style={{ color: 'var(--color-primary-400)' }} />}
+            <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+              {hideBalance ? 'Скрыт' : 'Виден'}
+            </span>
           </div>
-          <div className="relative" style={{ width: 40, height: 20 }}>
-            <div className="rounded-full transition-colors absolute inset-0"
-              style={{ background: hideBalance ? 'var(--border-default)' : 'var(--color-primary-500)' }} />
-            <div className="bg-white rounded-full absolute top-0.5 transition-transform"
-              style={{ width: 16, height: 16, transform: hideBalance ? 'translateX(2px)' : 'translateX(22px)' }} />
+          <div className="relative rounded-full transition-colors" style={{
+            width: 44, height: 24,
+            background: hideBalance ? 'rgba(255,255,255,0.1)' : 'var(--color-primary-600)',
+          }}>
+            <div className="bg-white rounded-full absolute top-0.5 transition-all duration-200" style={{
+              width: 20, height: 20,
+              transform: hideBalance ? 'translateX(2px)' : 'translateX(22px)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+            }} />
           </div>
         </button>
       </div>
 
-      {/* Data Export/Import */}
-      <DataExportImport />
-
-      {/* Keyboard shortcuts */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}><Keyboard size={16} /> Шорткаты</h3>
-        <div className="p-3 rounded-xl text-xs space-y-1.5" style={{ background: 'var(--bg-surface)' }}>
-          {['g — Цели', 'o — Операции', 'b — Бюджеты', 'd — Дашборд', 'n — Новая операция', 's — Настройки'].map(s => (
-            <div key={s} className="flex items-center gap-2">
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
-                style={{ background: 'var(--border-default)', color: 'var(--text-secondary)' }}>
-                {s.split(' — ')[0]}
+      {/* Shortcuts */}
+      <div className="rounded-[20px] border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Keyboard size={16} style={{ color: 'var(--text-tertiary)' }} />
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Шорткаты</p>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {[
+            { key: 'g', label: 'Цели' }, { key: 'o', label: 'Операции' },
+            { key: 'b', label: 'Бюджеты' }, { key: 'd', label: 'Дашборд' },
+            { key: 'n', label: 'Новая операция' }, { key: 's', label: 'Настройки' },
+          ].map(s => (
+            <div key={s.key} className="flex items-center gap-2 py-1.5">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
+                {s.key}
               </span>
-              <span style={{ color: 'var(--text-secondary)' }}>{s.split(' — ')[1]}</span>
+              <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{s.label}</span>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Data */}
+      <DataExportImport />
+
       {/* Account */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Аккаунт</h3>
-        <div className="p-3 rounded-xl" style={{ background: 'var(--bg-surface)' }}>
-          <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{user?.email || 'Пользователь'}</p>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Зарегистрирован: {user?.created_at?.slice(0, 10) || '—'}</p>
-        </div>
-        <button onClick={logout} className="flex items-center gap-2 w-full mt-2 p-3 rounded-xl transition-colors text-sm font-medium"
-          style={{ color: 'var(--color-danger-500)', background: 'transparent' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-danger-50)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-          <LogOut size={18} /> Выйти
+      <div className="rounded-[20px] border p-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Аккаунт</p>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{user?.email || email}</p>
+        <button onClick={logout}
+          className="flex items-center gap-2 w-full mt-3 py-2.5 rounded-xl text-sm font-medium transition-all btn-press"
+          style={{ color: '#F43F5E', background: 'rgba(244,63,94,0.08)' }}
+        >
+          <LogOut size={16} /> Выйти
         </button>
       </div>
 
-      <p className="text-xs text-center" style={{ color: 'var(--text-tertiary)' }}>FinHelper v1.0.0 • Данные хранятся локально</p>
+      <p className="text-xs text-center py-4" style={{ color: 'var(--text-tertiary)' }}>
+        FinHelper v1.0.0 • Приватный финансовый трекер
+      </p>
     </div>
   )
 }

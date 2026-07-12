@@ -5,12 +5,12 @@
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-primary-50: #ecfdf5; --color-primary-100: #d1fae5;
-  --color-primary-200: #a7f3d0; --color-primary-300: #6ee7b7;
-  --color-primary-400: #34d399; --color-primary-500: #10b981;
-  --color-primary-600: #059669; --color-primary-700: #047857;
-  --color-primary-800: #065f46; --color-primary-900: #064e3b;
-  --color-primary-950: #022c22;
+  --color-primary-50: #f5f3ff; --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe; --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa; --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed; --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6; --color-primary-900: #4c1d95;
+  --color-primary-950: #2e1065;
 
   --color-danger-50: #fff1f2; --color-danger-100: #ffe4e6;
   --color-danger-200: #fecdd3; --color-danger-300: #fda4af;
@@ -129,7 +129,7 @@
 }
 
 /* ============================================================ */
-/* ============= MIDNIGHT THEME (true dark, violet) =========== */
+/* ============= PREMIUM DARK NEON THEME ====================== */
 /* (key: "dark" — must stay for ThemeMode compatibility) ===== */
 /* ============================================================ */
 [data-theme="dark"] {
@@ -145,23 +145,30 @@
   --color-danger-400: #fb7185; --color-danger-500: #f43f5e;
   --color-danger-600: #e11d48; --color-danger-700: #be123c;
 
-  --bg-gradient: linear-gradient(135deg, #6d28d9 0%, #7c3aed 40%, #a78bfa 100%);
-  --bg-surface: #1a1a20;
-  --bg-page: #0f0f12;
-  --bg-card: #1a1a20;
-  --bg-elevated: #22222a;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --border-default: #2a2a35;
-  --border-subtle: #20202a;
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
-  --shadow-glow: 0 0 20px rgba(139,92,246,0.25);
-  --glass-bg: rgba(26,26,32,0.7);
-  --glass-border: rgba(42,42,53,0.5);
-  --hero-circle-1: radial-gradient(circle at 30% 40%, rgba(167,139,250,0.18) 0%, transparent 60%);
-  --hero-circle-2: radial-gradient(circle at 70% 60%, rgba(124,58,237,0.12) 0%, transparent 50%);
+  --color-accent-50: #eff6ff; --color-accent-100: #dbeafe;
+  --color-accent-200: #bfdbfe; --color-accent-300: #93c5fd;
+  --color-accent-400: #60a5fa; --color-accent-500: #3b82f6;
+
+  --color-warning-400: #fbbf24; --color-warning-500: #f59e0b;
+
+  /* ===== PREMIUM DARK NEON TOKENS ===== */
+  --bg-gradient: linear-gradient(135deg, #6E56CF 0%, #7C3AED 40%, #A78BFA 100%);
+  --bg-page: #0B1020;
+  --bg-surface: #141A2D;
+  --bg-card: #141A2D;
+  --bg-elevated: #1B2340;
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-tertiary: #64748B;
+  --border-default: rgba(255,255,255,0.06);
+  --border-subtle: rgba(255,255,255,0.04);
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 20px rgba(110,86,207,0.3);
+  --glass-bg: rgba(11,15,26,0.7);
+  --glass-border: rgba(255,255,255,0.08);
+  --hero-circle-1: radial-gradient(circle at 30% 40%, rgba(110,86,207,0.20) 0%, transparent 60%);
+  --hero-circle-2: radial-gradient(circle at 70% 60%, rgba(110,86,207,0.12) 0%, transparent 50%);
 }
 
 /* ============================================================ */
@@ -553,6 +560,50 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ============================================================ */
+/* ============= PREMIUM DARK NEON UTILITIES =================== */
+/* ============================================================ */
+
+/* --- Neon text glow --- */
+.neon-text {
+  color: var(--color-primary-400);
+  text-shadow: 0 0 8px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.15);
+}
+
+/* --- Neon border glow --- */
+.neon-border {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 8px rgba(139,92,246,0.2), inset 0 0 8px rgba(139,92,246,0.05);
+}
+
+/* --- Dark elevated card with stronger shadow --- */
+.card-dark-elevated {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 4px rgba(139,92,246,0.08);
+}
+
+/* --- Premium glass with neon border --- */
+.glass-neon {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139,92,246,0.2);
+  box-shadow: 0 0 20px rgba(139,92,246,0.08);
+}
+
+/* --- Subtle purple tint surface --- */
+.bg-surface-tint {
+  background: color-mix(in srgb, var(--bg-surface) 100%, #8b5cf6 3%);
+}
+
+/* --- Divider with gradient --- */
+.divider-gradient {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-primary-500) 50%, transparent 100%);
+}
 
 /* ============================================================ */
 /* ============= ACCESSIBILITY ================================= */

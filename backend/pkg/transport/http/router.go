@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/RedEye472-afk/FinHelper/backend/internal/handler"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/auth"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/email"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/ratelimit"
@@ -131,6 +132,9 @@ func NewRouter(deps Deps, mw RouterMiddleware) http.Handler {
 			if deps.Credit != nil {
 				NewCreditHandler(deps.Credit, deps.Logger).Register(r)
 			}
+
+			// PDF parsing — accepts multipart file upload, returns extracted text.
+			r.Post("/import/parse-pdf", handler.HandlePDFParse)
 
 			// GET /me returns the authenticated user's profile.
 			r.Get("/me", func(w http.ResponseWriter, req *http.Request) {

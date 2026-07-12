@@ -1,12 +1,16 @@
+/**
+ * OperationsPage — banking-style transaction list (T-Bank inspired)
+ * Premium Dark Neon: bg #0B1020, surface #141A2D, primary #6E56CF, radius 20px cards
+ */
 import { useState, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Plus, X, Inbox, Loader2 } from 'lucide-react'
+import {
+  Search, Plus, X, Inbox, Loader2,
+  RotateCw, Trash2, Calendar,
+} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOperations, useDeleteOperation, useAccounts, useCategories } from '../api/queries'
 import { useToast } from '../components/ui/Toast'
-import { MoneyDisplay } from '../components/shared/MoneyDisplay'
-import { Card } from '../components/ui/Card'
-import { EmptyState } from '../components/ui/EmptyState'
 import { toDecimal, formatMoney } from '../lib/money'
 import type { Operation, Category, Account } from '../types'
 
@@ -41,6 +45,40 @@ function toRow(op: Operation, accounts: Account[], categories: Category[]): Oper
     account: acc?.name || 'Основной',
   }
 }
+
+// ── Animation variants ──
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.035 },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' as const } },
+}
+
+const sheetOverlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
+}
+
+const sheetPanelVariants = {
+  hidden: { y: '100%', opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { type: 'spring' as const, damping: 28, stiffness: 300, mass: 0.9 },
+  },
+  exit: {
+    y: '100%',
+    opacity: 0,
+    transition: { duration: 0.18, ease: 'easeIn' as const },
+  },
+} as const
 
 export function OperationsPage() {
   const navigate = useNavigate()
@@ -90,114 +128,661 @@ export function OperationsPage() {
     return g
   }, [filtered])
 
-  const handleDelete = (id: number) => {
+  const handleDelete = useCallback((id: number) => {
     if (!confirm('Удалить операцию?')) return
     deleteOp.mutate(id, {
       onSuccess: () => { toast('success', 'Операция удалена'); setSelectedOp(null) },
       onError: () => toast('error', 'Ошибка удаления'),
     })
-  }
+  }, [deleteOp, toast])
 
   return (
-    <div className="space-y-4">
-      <div className="relative">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{color: 'var(--text-tertiary)'}} />
-        <input type="text" value={search} onChange={e => setSearchWithURL(e.target.value)}
-          className="input pl-9 pr-9"
-          placeholder="Поиск операций..." />
-        {search && <button onClick={() => setSearchWithURL('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{color: 'var(--text-tertiary)'}}><X size={14} /></button>}
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
-        <button onClick={() => setFilterWithURL('')} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors btn-press ${!filterCat ? 'text-white' : ''}`}
-          style={!filterCat ? {background: 'var(--color-primary-500)', color: 'white'} : {background: 'var(--bg-surface)', color: 'var(--text-secondary)'}}>Все</button>
-        {cats.map(cat => (
-          <button key={cat} onClick={() => setFilterWithURL(cat === filterCat ? '' : cat)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors btn-press ${filterCat === cat ? 'text-white' : ''}`}
-            style={filterCat === cat ? {background: 'var(--color-primary-500)', color: 'white'} : {background: 'var(--bg-surface)', color: 'var(--text-secondary)'}}>
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {isLoading ? (
-        <div className="flex items-center justify-center h-48"><Loader2 className="animate-spin" style={{color: 'var(--color-primary-500)'}} size={24} /></div>
-      ) : Object.entries(grouped).length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title="Нет операций"
-          description={search || filterCat ? 'Измените параметры поиска' : 'Создайте первую операцию'}
-          action={!search && !filterCat ? { label: 'Создать операцию', onClick: () => navigate('/operations/new') } : undefined}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        minHeight: '100%',
+      }}
+    >
+      {/* ── Pill Search ── */}
+      <div style={{ position: 'relative' }}>
+        <Search
+          size={16}
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--text-tertiary)',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
         />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearchWithURL(e.target.value)}
+          placeholder="Поиск операций..."
+          style={{
+            width: '100%',
+            height: 44,
+            padding: '0 40px',
+            borderRadius: 22,
+            border: '1px solid var(--border-default)',
+            background: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
+            fontSize: 14,
+            outline: 'none',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
+            boxSizing: 'border-box',
+          }}
+          onFocus={e => {
+            e.currentTarget.style.borderColor = '#6E56CF'
+            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(110,86,207,0.15)'
+          }}
+          onBlur={e => {
+            e.currentTarget.style.borderColor = 'var(--border-default)'
+            e.currentTarget.style.boxShadow = 'none'
+          }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearchWithURL('')}
+            style={{
+              position: 'absolute',
+              right: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-tertiary)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* ── Filter Chips ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          paddingBottom: 2,
+        }}
+      >
+        <button
+          onClick={() => setFilterWithURL('')}
+          style={{
+            flexShrink: 0,
+            padding: '7px 16px',
+            borderRadius: 100,
+            fontSize: 12,
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: !filterCat ? '#6E56CF' : 'var(--bg-surface)',
+            color: !filterCat ? '#fff' : 'var(--text-secondary)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Все
+        </button>
+        {cats.map(cat => {
+          const active = filterCat === cat
+          return (
+            <button
+              key={cat}
+              onClick={() => setFilterWithURL(cat === filterCat ? '' : cat)}
+              style={{
+                flexShrink: 0,
+                padding: '7px 16px',
+                borderRadius: 100,
+                fontSize: 12,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: active ? '#6E56CF' : 'var(--bg-surface)',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: categoryColors[cat] || '#6b7280',
+                  flexShrink: 0,
+                }}
+              />
+              {cat}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Content ── */}
+      {isLoading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+          >
+            <Loader2 size={24} style={{ color: '#6E56CF' }} />
+          </motion.div>
+        </div>
+      ) : Object.entries(grouped).length === 0 ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 280,
+            gap: 12,
+            color: 'var(--text-tertiary)',
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 16,
+              background: 'var(--bg-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Inbox size={24} style={{ color: 'var(--text-tertiary)' }} />
+          </div>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>
+            Нет операций
+          </p>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            {search || filterCat ? 'Измените параметры поиска' : 'Создайте первую операцию'}
+          </p>
+          {!search && !filterCat && (
+            <button
+              onClick={() => navigate('/operations/new')}
+              style={{
+                marginTop: 8,
+                padding: '10px 24px',
+                borderRadius: 12,
+                border: 'none',
+                background: 'linear-gradient(135deg, #6E56CF 0%, #7C3AED 100%)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.9' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            >
+              Создать операцию
+            </button>
+          )}
+        </div>
       ) : (
-        <div className="space-y-4">
-          <AnimatePresence>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+        >
+          <AnimatePresence mode="popLayout">
             {Object.entries(grouped).map(([date, ops]) => {
-              const dayTotal = ops.reduce((s, o) => s.plus(o.type === 'expense' ? toDecimal(o.amount).neg() : toDecimal(o.amount)), toDecimal('0'))
+              const dayTotal = ops.reduce(
+                (s, o) => s.plus(o.type === 'expense' ? toDecimal(o.amount).neg() : toDecimal(o.amount)),
+                toDecimal('0'),
+              )
+              const isPositive = dayTotal.gte(0)
               return (
-                <motion.div key={date} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <span className="text-xs font-medium" style={{color: 'var(--text-tertiary)'}}>{new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span>
-                    <MoneyDisplay amount={dayTotal} type={dayTotal.gte(0) ? 'income' : 'expense'} size="sm" showSign />
+                <motion.div
+                  key={date}
+                  layout
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                >
+                  {/* ── Date Header ── */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0 4px 10px 4px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--text-tertiary)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {new Date(date + 'T00:00:00').toLocaleDateString('ru-RU', {
+                        day: 'numeric',
+                        month: 'long',
+                      })}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        color: isPositive ? '#22C55E' : '#F43F5E',
+                      }}
+                    >
+                      {isPositive ? '+' : ''}
+                      {formatMoney(dayTotal)}
+                    </span>
                   </div>
-                  <Card className="divide-y" style={{borderColor: 'var(--border-subtle)'}}>
-                    {ops.map(op => (
-                      <button key={op.id} onClick={() => setSelectedOp(op)}
-                        className="flex items-center gap-3 py-2.5 w-full text-left hover:bg-gray-50 -mx-4 px-4 transition-colors first:rounded-t-xl last:rounded-b-xl"
-                        style={{borderColor: 'var(--border-subtle)'}}>
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm flex-shrink-0"
-                          style={{background: op.type === 'income' ? 'rgba(16,185,129,0.1)' : 'var(--bg-surface)'}}>
-                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: categoryColors[op.category] || '#6b7280' }} />
+
+                  {/* ── Day Card ── */}
+                  <div
+                    style={{
+                      background: 'var(--bg-surface)',
+                      borderRadius: 20,
+                      border: '1px solid var(--border-default)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {ops.map((op, idx) => (
+                      <motion.button
+                        key={op.id}
+                        variants={itemVariants}
+                        onClick={() => setSelectedOp(op)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          width: '100%',
+                          padding: '12px 16px',
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background 0.15s',
+                          borderTop: idx > 0 ? '1px solid var(--border-default)' : 'none',
+                          color: 'inherit',
+                          fontFamily: 'inherit',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                      >
+                        {/* Category dot container */}
+                        <div
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            background:
+                              op.type === 'income'
+                                ? 'rgba(34,197,94,0.1)'
+                                : 'rgba(255,255,255,0.04)',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              backgroundColor: categoryColors[op.category] || '#6b7280',
+                            }}
+                          />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate" style={{color: 'var(--text-primary)'}}>{op.description}</p>
-                          <p className="text-xs" style={{color: 'var(--text-tertiary)'}}>{op.category}</p>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                              margin: 0,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {op.description}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--text-tertiary)',
+                              margin: '2px 0 0 0',
+                            }}
+                          >
+                            {op.category}
+                          </p>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <MoneyDisplay amount={op.amount} type={op.type as 'income' | 'expense'} size="sm" showSign />
-                          <p className="text-[10px]" style={{color: 'var(--text-tertiary)'}}>{op.account}</p>
+
+                        {/* Amount */}
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              fontFamily: 'system-ui, -apple-system, sans-serif',
+                              margin: 0,
+                              color: op.type === 'income' ? '#22C55E' : '#F43F5E',
+                            }}
+                          >
+                            {op.type === 'income' ? '+' : '−'}
+                            {formatMoney(op.amount)}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--text-tertiary)',
+                              margin: '1px 0 0 0',
+                            }}
+                          >
+                            {op.account}
+                          </p>
                         </div>
-                      </button>
+                      </motion.button>
                     ))}
-                  </Card>
+                  </div>
                 </motion.div>
               )
             })}
           </AnimatePresence>
-        </div>
+        </motion.div>
       )}
 
-      <button onClick={() => navigate('/operations/new')} className="fixed bottom-20 right-5 w-12 h-12 rounded-full bg-gradient-primary text-white shadow-lg flex items-center justify-center transition-all btn-press z-30 animate-float">
-        <Plus size={24} />
-      </button>
+      {/* ── FAB ── */}
+      <motion.button
+        onClick={() => navigate('/operations/new')}
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.94 }}
+        style={{
+          position: 'fixed',
+          bottom: 80,
+          right: 20,
+          width: 52,
+          height: 52,
+          borderRadius: 16,
+          border: 'none',
+          background: 'linear-gradient(135deg, #6E56CF 0%, #7C3AED 100%)',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 4px 20px rgba(110,86,207,0.4)',
+          zIndex: 30,
+        }}
+      >
+        <Plus size={24} strokeWidth={2.5} />
+      </motion.button>
 
+      {/* ── Bottom Sheet ── */}
       <AnimatePresence>
         {selectedOp && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4"
-            onClick={() => setSelectedOp(null)}>
-            <motion.div initial={{ y: 50, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 50, scale: 0.95 }}
-              className="rounded-2xl p-5 w-full max-w-sm space-y-4"
-              style={{background: 'var(--bg-elevated)', border: '1px solid var(--border-default)'}}
-              onClick={e => e.stopPropagation()}>
+          <motion.div
+            key="sheet-overlay"
+            variants={sheetOverlayVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              zIndex: 50,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+            }}
+            onClick={() => setSelectedOp(null)}
+          >
+            <motion.div
+              key="sheet-panel"
+              variants={sheetPanelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: 420,
+                background: 'var(--bg-elevated)',
+                borderRadius: '20px 20px 0 0',
+                border: '1px solid var(--border-default)',
+                borderBottom: 'none',
+                padding: '12px 20px 32px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 20,
+              }}
+            >
+              {/* Sheet handle */}
+              <div
+                style={{
+                  width: 32,
+                  height: 3,
+                  borderRadius: 2,
+                  background: 'var(--text-tertiary)',
+                  opacity: 0.3,
+                  margin: '0 auto 4px',
+                }}
+              />
+
+              {/* Header */}
               <div>
-                <p className="text-xs" style={{color: 'var(--text-tertiary)'}}>{selectedOp.category}</p>
-                <p className="text-lg font-semibold" style={{color: 'var(--text-primary)'}}>{selectedOp.description}</p>
-                <p className="text-xs" style={{color: 'var(--text-tertiary)'}}>{new Date(selectedOp.date).toLocaleDateString('ru-RU')}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: categoryColors[selectedOp.category] || '#6b7280',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: 'var(--text-tertiary)',
+                      letterSpacing: '0.03em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {selectedOp.category}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    margin: 0,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {selectedOp.description}
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 6,
+                  }}
+                >
+                  <Calendar size={12} style={{ color: 'var(--text-tertiary)' }} />
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                    {new Date(selectedOp.date + 'T00:00:00').toLocaleDateString('ru-RU', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
               </div>
-              <div className="text-center py-3">
-                <MoneyDisplay amount={selectedOp.amount} type={selectedOp.type as 'income' | 'expense'} size="lg" showSign />
+
+              {/* Amount display */}
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '16px 0',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 16,
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    margin: 0,
+                    color: selectedOp.type === 'income' ? '#22C55E' : '#F43F5E',
+                  }}
+                >
+                  {selectedOp.type === 'income' ? '+ ' : '− '}
+                  {formatMoney(selectedOp.amount)}
+                </p>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-tertiary)',
+                    margin: '4px 0 0 0',
+                  }}
+                >
+                  {selectedOp.account}
+                </p>
               </div>
-              <div className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
-                <div className="flex justify-between"><span>Счёт</span><span className="font-medium">{selectedOp.account}</span></div>
-                <div className="flex justify-between"><span>Сумма</span><span className="font-mono-money">{formatMoney(selectedOp.amount)}</span></div>
+
+              {/* Details */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0,
+                  fontSize: 13,
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border-default)',
+                  }}
+                >
+                  <span>Счёт</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {selectedOp.account}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '10px 0',
+                  }}
+                >
+                  <span>Сумма</span>
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {selectedOp.type === 'income' ? '' : '−'}
+                    {formatMoney(selectedOp.amount)}
+                  </span>
+                </div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => navigate('/operations/new')} className="flex-1 py-2.5 rounded-xl font-medium text-sm btn-secondary btn-press">
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => { setSelectedOp(null); navigate('/operations/new') }}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '13px 0',
+                    borderRadius: 14,
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)' }}
+                >
+                  <RotateCw size={14} />
                   Повторить
                 </button>
-                <button onClick={() => handleDelete(selectedOp.id)} disabled={deleteOp.isPending}
-                  className="flex-1 py-2.5 rounded-xl font-medium text-sm btn-danger btn-press disabled:opacity-50">
+                <button
+                  onClick={() => handleDelete(selectedOp.id)}
+                  disabled={deleteOp.isPending}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '13px 0',
+                    borderRadius: 14,
+                    border: 'none',
+                    background: 'rgba(244,63,94,0.12)',
+                    color: '#F43F5E',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: deleteOp.isPending ? 'not-allowed' : 'pointer',
+                    opacity: deleteOp.isPending ? 0.5 : 1,
+                    transition: 'background 0.15s',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => {
+                    if (!deleteOp.isPending) e.currentTarget.style.background = 'rgba(244,63,94,0.2)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244,63,94,0.12)'
+                  }}
+                >
+                  <Trash2 size={14} />
                   {deleteOp.isPending ? 'Удаление...' : 'Удалить'}
                 </button>
               </div>

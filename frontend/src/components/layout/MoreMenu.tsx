@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Wallet, GraduationCap, Settings as SettingsIcon, BookOpen, PiggyBank, CreditCard, Scale, Home } from 'lucide-react'
+import { Wallet, GraduationCap, Settings as SettingsIcon, BookOpen, PiggyBank, CreditCard, Scale, Home, FileText } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../hooks/useSettings'
 
@@ -23,7 +23,8 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
   const bottomItems = [
     { to: '/settings', icon: SettingsIcon, label: 'Настройки', desc: 'Тема, валюта, видимость' },
     { to: '/onboarding', icon: BookOpen, label: 'Обучение', desc: 'Как пользоваться FinHelper' },
-  ]
+    { to: '/import', icon: FileText, label: 'Импорт выписок', desc: 'Сбербанк, CSV, PDF' },
+    ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>

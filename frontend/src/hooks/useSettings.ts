@@ -4,7 +4,7 @@ import type { Settings, ThemeMode, Currency } from '../types'
 const STORAGE_KEY = 'finhelper-settings'
 
 const defaults: Settings = {
-  theme: 'emerald' as ThemeMode,
+  theme: 'dark' as ThemeMode,
   currency: 'RUB' as Currency,
   hideBalance: false,
   name: 'Алексей',
