@@ -12,6 +12,8 @@
 - Vercel (постоянный хостинг, auto-SSL, CDN)
 - Проект: finhelper-frontend
 - Team: fin-helper
+- **Build:** Vite 8.1.3, React 19.2.7, TypeScript 6.0.3
+- **UI Libraries:** TanStack Query 5.101, TanStack Table 8.21, TanStack Virtual 3.14, React Hook Form 7.81, Zod 4.4, date-fns 4.4, Sonner 2.0.7
 
 ### 🐳 Docker (локальный резерв)
 - Собран через `docker compose up -d --build`

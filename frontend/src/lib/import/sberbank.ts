@@ -1,15 +1,13 @@
 /**
- * Sberbank statement parser — для PDF выписок Сбербанка
- * Формат: каждая строка = отдельное поле, данные идут блоками
+ * Sberbank statement parser
  *
- * Структура транзакции:
- *   DD.MM.YYYY        ← дата
- *   HH:MM             ← время (опционально, иногда пропускается)
- *   Категория         ← например "Супермаркеты"
- *   Сумма             ← например "186,97" или "+4 000,00"
- *   Остаток           ← например "5 613,50"
- *   [код авторизации] ← 6 цифр, опционально
- *   [описание...]     ← merchant, может быть на 1-2 строки
+ * Два формата:
+ * 1. parseSberbankText() — вертикальный (каждое поле с новой строки, для copy-paste)
+ * 2. parseSberbankInline() — горизонтальный (все поля на одной строке, для pdf.js)
+ *
+ * pdf.js возвращает текст построчно (координатная сортировка):
+ *   DD.MM.YYYY HH:MM CATEGORY AMOUNT,XX BALANCE,XX
+ *   DD.MM.YYYY AUTHCODE MERCHANT DESCRIPTION
  */
 
 export interface ParsedTransaction {
@@ -48,7 +46,7 @@ function isAmount(s: string): boolean {
 
 /** Проверить что строка похожа на остаток: "5 613,50" */
 function isBalance(s: string): boolean {
-  return /^[\d\s\xa0]+,\d{2}$/.test(s.trim()) && !s.includes('+') && !s.includes('-')
+  return /^[\d\s\xa0]+,\d{2}$/.test(s.trim()) && !/[+-]/.test(s)
 }
 
 /** Код авторизации (6 цифр) */
@@ -56,11 +54,13 @@ function isAuthCode(s: string): boolean {
   return /^\d{6}$/.test(s.trim())
 }
 
-/** Sberbank категория → FinHelper тип */
-function categorize(cat: string): 'income' | 'expense' {
-  const incomeKeywords = ['внесение наличных', 'перевод', 'зачисление', 'возврат', 'кэшбэк', 'проценты', 'зарплата']
-  return incomeKeywords.some(k => cat.toLowerCase().includes(k)) ? 'income' : 'expense'
-}
+/** Категории доходов */
+const INCOME_CATEGORIES = new Set([
+  'внесение наличных', 'перевод с карты', 'перевод на карту',
+  'перевод сбп', 'перевод', 'зачисление', 'зарплата', 'проценты',
+  'кэшбэк', 'кешбэк', 'возврат', 'возврат, отмена операции',
+  'возврат покупки по qr–коду сбп', 'оплата по qr–коду сбп',
+])
 
 /** Sberbank категория → нормализованное название */
 function normalizeCategory(cat: string): string {
@@ -130,10 +130,86 @@ function normalizeCategory(cat: string): string {
   return map[cat.toLowerCase().trim()] || cat
 }
 
+/** Определить тип: income или expense */
+function categorize(cat: string): 'income' | 'expense' {
+  return INCOME_CATEGORIES.has(cat.toLowerCase().trim()) ? 'income' : 'expense'
+}
+
 /**
- * Парсинг текста, извлечённого из PDF выписки Сбербанка.
- * Поддерживает многостраничные выписки с вертикальным форматом.
- * Находит все 4500+ транзакций.
+ * Парсинг текста ИЗ КООРДИНАТНО-СОРТИРОВАННОГО PDF (pdf.js).
+ *
+ * Формат строки (pdf.js группировка):
+ *   DD.MM.YYYY HH:MM CATEGORY AMOUNT,XX BALANCE,XX
+ *   DD.MM.YYYY AUTH_CODE MERCHANT_DESCRIPTION...
+ *
+ * Первая строка — дата, время, категория, сумма, остаток.
+ * Вторая строка — дата, код авторизации, описание мерчанта.
+ */
+export function parseSberbankInline(text: string): ParsedTransaction[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const txns: ParsedTransaction[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(/\s+/)
+
+    // Ищем строку с датой и временем
+    const dateIdx = parts.findIndex(p => isDate(p))
+    if (dateIdx === -1) continue
+
+    const dateStr = parts[dateIdx]
+    const timeStr = dateIdx + 1 < parts.length && isTime(parts[dateIdx + 1]) ? parts[dateIdx + 1] : ''
+
+    // Ищем сумму (число вида 186,97) после категории
+    let amountIdx = -1
+    let foundMinus = false
+    for (let j = dateIdx + (timeStr ? 2 : 1); j < parts.length; j++) {
+      if (parts[j] === '-') { foundMinus = true; continue }
+      if (parts[j] === '+') { foundMinus = false; continue }
+      if (isAmount(parts[j])) { amountIdx = j; break }
+    }
+    if (amountIdx === -1) continue
+
+    // Категория — всё между временем и суммой
+    const catStart = dateIdx + (timeStr ? 2 : 1)
+    let category = parts.slice(catStart, amountIdx).join(' ')
+
+    // Убираем лишние числовые токены из категории (коды авторизации и т.д.)
+    category = category.split(' ').filter(t => !isAuthCode(t) && !/^\d+$/.test(t)).join(' ')
+
+    // Сумма и остаток
+    const amountStr = (foundMinus ? '-' : '') + parts[amountIdx]
+    const balanceStr = amountIdx + 1 < parts.length && !isDate(parts[amountIdx + 1]) ? parts[amountIdx + 1] : ''
+
+    // Описание — следующая строка, если она начинается с даты и имеет код
+    let description = ''
+    if (i + 1 < lines.length) {
+      const nextParts = lines[i + 1].split(/\s+/)
+      const nextDateIdx = nextParts.findIndex(p => isDate(p))
+      if (nextDateIdx !== -1 && nextDateIdx + 1 < nextParts.length && isAuthCode(nextParts[nextDateIdx + 1])) {
+        description = nextParts.slice(nextDateIdx + 2).join(' ').trim()
+        i++ // пропускаем строку описания
+      }
+    }
+
+    if (!category) continue
+
+    const amount = parseRussianNumber(amountStr.replace(/^\+/, ''))
+    const isNegative = amountStr.startsWith('-') || (!amountStr.startsWith('+') && categorize(category) === 'expense')
+
+    txns.push({
+      date: normalizeDate(dateStr),
+      category: normalizeCategory(category),
+      description: description || category,
+      amount: isNegative ? -amount : amount,
+    })
+  }
+
+  return txns
+}
+
+/**
+ * Парсинг текста, извлечённого ИЗ КОПИРОВАННОГО PDF (вертикальный формат).
+ * Каждое поле на отдельной строке.
  */
 export function parseSberbankText(text: string): ParsedTransaction[] {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
@@ -142,26 +218,21 @@ export function parseSberbankText(text: string): ParsedTransaction[] {
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
-
-    // Ищем строку, похожую на дату ДД.ММ.ГГГГ
     if (isDate(line)) {
       const dateStr = line
       i++
 
-      // Следующая строка может быть временем (ЧЧ:ММ) или сразу категорией
       let time = ''
       if (i < lines.length && isTime(lines[i])) {
         time = lines[i]
         i++
       }
 
-      // Дальше должна быть категория (не сумма, не баланс, не дата, не код)
       let category = ''
       while (i < lines.length) {
         const next = lines[i]
         if (isAmount(next) || isDate(next)) break
         if (isBalance(next) && !category) { i++; break }
-        // Пропускаем коды авторизации (6 цифр) — они не категории
         if (!isAuthCode(next) || !category) {
           category = next
           i++
@@ -170,10 +241,8 @@ export function parseSberbankText(text: string): ParsedTransaction[] {
         i++
       }
 
-      // Проверяем что нашли категорию
       if (!category || i >= lines.length) continue
 
-      // Ищем сумму — может быть не сразу следующей строкой
       while (i < lines.length && !isAmount(lines[i]) && !isDate(lines[i])) {
         i++
       }
@@ -182,16 +251,13 @@ export function parseSberbankText(text: string): ParsedTransaction[] {
       const amountStr = lines[i]
       i++
 
-      // Ищем баланс
       while (i < lines.length && !isBalance(lines[i]) && !isDate(lines[i]) && !isAmount(lines[i])) {
         i++
       }
       if (i >= lines.length || isDate(lines[i]) || isAmount(lines[i])) continue
 
-      // Баланс найден
       i++
 
-      // Собираем описание между балансом и следующей датой
       let descLines: string[] = []
       while (i < lines.length && !isDate(lines[i])) {
         const l = lines[i].trim()
@@ -220,28 +286,32 @@ export function parseSberbankText(text: string): ParsedTransaction[] {
 }
 
 /**
- * Парсинг CSV от Сбербанка (разделитель ";")
- * Формат: Дата;Категория;Описание;Сумма;Валюта;Остаток
+ * Парсинг CSV выписки Сбербанка (; разделитель).
  */
-export function parseSberbankCSV(csv: string): ParsedTransaction[] {
-  const lines = csv.split('\n').map(l => l.trim()).filter(Boolean)
+export function parseSberbankCSV(text: string): ParsedTransaction[] {
+  const lines = text.split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+
+  // Пропускаем заголовок
+  const dataStart = lines[0].includes('Дата') ? 1 : 0
   const txns: ParsedTransaction[] = []
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = dataStart; i < lines.length; i++) {
     const cols = lines[i].split(';')
     if (cols.length < 4) continue
 
-    const [dateRaw, category, description, amountRaw] = cols
-    if (!dateRaw) continue
+    const [dateStr, , description, rawAmount] = cols
+    if (!isDate(dateStr.trim())) continue
 
-    const amount = parseRussianNumber((amountRaw || '0').replace(/^\+/, ''))
-    const isNegative = (amountRaw || '').startsWith('-')
+    const amount = parseRussianNumber(rawAmount.replace(/["\s]/g, ''))
+    const isNegative = amount < 0 || rawAmount.trim().startsWith('-')
+    const cat = description.trim()
 
     txns.push({
-      date: normalizeDate(dateRaw.trim()),
-      category: normalizeCategory((category || 'Прочее').trim()),
-      description: (description || '').trim(),
-      amount: isNegative ? -amount : amount,
+      date: normalizeDate(dateStr.trim()),
+      category: normalizeCategory(cat),
+      description: cat,
+      amount: isNegative ? amount : Math.abs(amount),
     })
   }
 

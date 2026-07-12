@@ -10,7 +10,7 @@ import {
   ArrowLeft, ArrowRight, Download, X, TrendingUp, TrendingDown,
 } from 'lucide-react'
 import { useAccounts, useCreateOperation, useCategories } from '../api/queries'
-import { parseSberbankText, parseSberbankCSV, type ParsedTransaction } from '../lib/import/sberbank'
+import { parseSberbankText, parseSberbankCSV, parseSberbankInline, type ParsedTransaction } from '../lib/import/sberbank'
 import { extractTextFromPDF } from '../lib/import/pdfExtractor'
 import { apiRequest } from '../api/client'
 import type { OperationCreate } from '../types'
@@ -59,14 +59,18 @@ export function ImportPage() {
   const transactions = useMemo<ParsedTransaction[]>(() => {
     if (!rawText.trim()) return []
     try {
+      // Для PDF (pdf.js координатный вывод) используем inline-парсер
+      if (format === 'pdf') {
+        return parseSberbankInline(rawText)
+      }
       return format === 'csv'
         ? parseSberbankCSV(rawText)
         : parseSberbankText(rawText)
-    } catch {
+    } catch (e) {
+      console.warn('Parser error:', e)
       return []
     }
   }, [rawText, format])
-
   const totalIncome = useMemo(
     () => transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0),
     [transactions],
@@ -301,7 +305,18 @@ export function ImportPage() {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {transactions.length === 0 && rawText.trim() && (
+              <details className="mt-2">
+                <summary className="text-xs cursor-pointer" style={{ color: '#F43F5E' }}>
+                  🔍 Сырой текст ({rawLineCount} строк, показаны первые 30)
+                </summary>
+                <pre className="text-[10px] mt-2 p-2 rounded-lg max-h-40 overflow-y-auto font-mono leading-tight"
+                  style={{ background: 'rgba(0,0,0,0.2)', color: '#94A3B8' }}>
+                  {rawText.split('\n').slice(0, 30).join('\n')}
+                </pre>
+              </details>
+            )}
+            <div className="grid grid-cols-2 gap-3 mt-3">
               <div className="rounded-xl p-3" style={{ background: 'rgba(34,197,94,0.08)' }}>
                 <p className="text-lg font-bold font-mono-money" style={{ color: '#22C55E' }}>
                   +{totalIncome.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽

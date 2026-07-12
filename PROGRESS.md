@@ -40,6 +40,7 @@
 | 11. **Калькулятор вкладов (ф.6)** | **`service/deposit` + mathcore + HTTP + frontend** | **36** | **✅ (09.07)** |
 | 12. Backend + Frontend: деплой на Vercel | `frontend/` + `api/index.go` | — | ✅ (12.07) |
 | 13. Импорт выписок Сбербанк PDF | `frontend/src/lib/import/`, `ImportPage`, `scripts/pdf_parse.py`, `backend/internal/handler/pdf_parse.go` | — | ✅ (12.07) |
+| 14. OSS Integration — TanStack Table/Virtual, React Hook Form, date-fns, Sonner | `@tanstack/react-virtual`, `@tanstack/react-table`, `react-hook-form`, `date-fns`, `sonner` | — | ✅ (12.07) |
 
 **Total Go test packages:** 22 (все зелёные, проверено 09.07). **Documented float64 bridges:** 2.
 
