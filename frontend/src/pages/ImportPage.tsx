@@ -9,7 +9,7 @@ import {
   Upload, FileText, AlertCircle, CheckCircle2, Loader2,
   ArrowLeft, ArrowRight, Download, X, TrendingUp, TrendingDown,
 } from 'lucide-react'
-import { useAccounts, useCreateOperation } from '../api/queries'
+import { useAccounts, useCreateOperation, useCategories } from '../api/queries'
 import { parseSberbankText, parseSberbankCSV, type ParsedTransaction } from '../lib/import/sberbank'
 import { extractTextFromPDF, looksLikeSberbankPDF } from '../lib/import/pdfExtractor'
 import { apiRequest } from '../api/client'
@@ -42,7 +42,17 @@ export function ImportPage() {
   const [processing, setProcessing] = useState(false)
 
   const { data: accounts } = useAccounts()
+  const { data: categories } = useCategories()
   const accList = accounts ?? []
+  const catMap = useMemo(() => {
+    const m = new Map<string, number>()
+    if (categories) {
+      for (const c of categories) {
+        m.set(c.name.toLowerCase(), c.id)
+      }
+    }
+    return m
+  }, [categories])
 
   // Parse transactions from raw text
   const rawLineCount = useMemo(() => rawText.split('\n').filter(l => l.trim()).length, [rawText])
@@ -108,7 +118,8 @@ export function ImportPage() {
             type: tx.amount > 0 ? 'income' : 'expense',
             amount: Math.abs(tx.amount).toFixed(2),
             operation_date: tx.date,
-            description: tx.description ? `${tx.description}` : tx.category,
+            description: tx.description || tx.category,
+            category_id: catMap.get(tx.category.toLowerCase()),
             calc_id: crypto.randomUUID(),
           }
           await createOp.mutateAsync(payload)
