@@ -245,8 +245,8 @@ func HandlePDFParse(w http.ResponseWriter, r *http.Request) {
 	tmpFile.Close()
 
 	text, err := extractPDFText(tmpPath)
-	if err != nil {
-		log.Printf("pdf_parse: extract error: %v", err)
+	if err != nil || text == "" {
+		log.Printf("pdf_parse: extract error or empty: %v", err)
 		// Don't fail — frontend will use pdf.js fallback
 		writeJSON(w, http.StatusOK, map[string]any{
 			"text":       "",
