@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -135,6 +136,43 @@ func NewRouter(deps Deps, mw RouterMiddleware) http.Handler {
 
 			// PDF parsing — accepts multipart file upload, returns extracted text.
 			r.Post("/import/parse-pdf", handler.HandlePDFParse)
+
+			// Bulk delete operations by account (for reset/reimport)
+			r.Delete("/operations/bulk", func(w http.ResponseWriter, req *http.Request) {
+				ctx := req.Context()
+				uid, ok := MustUserID(ctx)
+				if !ok {
+					writeError(w, http.StatusUnauthorized, "auth.unauthorized", "no user in context")
+					return
+				}
+				accountIDStr := req.URL.Query().Get("account_id")
+				if accountIDStr == "" {
+					writeError(w, http.StatusBadRequest, "import.missing_account", "account_id required")
+					return
+				}
+				accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "import.invalid_account", "invalid account_id")
+					return
+				}
+				// Verify account belongs to user
+							acc, err := deps.Pool.GetAccount(ctx, uid, accountID)
+							if err != nil || acc.UserID != uid {
+					writeError(w, http.StatusNotFound, "import.account_not_found", "account not found")
+					return
+				}
+				// Delete all operations for this account via service
+							count, err := deps.Operations.BulkDeleteByAccount(ctx, uid, accountID, nil, nil)
+							if err != nil {
+								deps.Logger.Error("bulk delete operations", "error", err)
+								writeError(w, http.StatusInternalServerError, "internal", "failed to delete operations")
+								return
+							}
+							writeJSON(w, http.StatusOK, map[string]any{
+								"deleted":    count,
+								"account_id": accountID,
+							})
+			})
 
 			// GET /me returns the authenticated user's profile.
 			r.Get("/me", func(w http.ResponseWriter, req *http.Request) {

@@ -40,6 +40,10 @@ type OperationRepo interface {
 	// SumByAccountSince returns Σ signed_amount over non-deleted operations
 	// of the account. Used to recompute the cached balance deterministically.
 	SumByAccountSince(ctx context.Context, accountID int64) (domain.Money, error)
+
+	// Bulk delete operations by account (optionally with date range).
+	// Returns count of deleted rows.
+	DeleteOperationsByAccount(ctx context.Context, accountID int64, from, to *time.Time) (int64, error)
 }
 
 // AccountRepo is split out for callers that only need account operations.
@@ -294,4 +298,25 @@ func mapStorageErr(err error, what string) error {
 // collisions require two requests in the same nanosecond for the same user.
 func newCalcID(userID int64, now time.Time) string {
 	return fmt.Sprintf("srv:%d:%d", userID, now.UnixNano())
+}
+
+// BulkDeleteByAccount deletes all operations for the given account (optionally
+// filtered by date range). Returns count of deleted rows.
+// Recomputes the account balance after deletion.
+func (s *Service) BulkDeleteByAccount(ctx context.Context, userID, accountID int64, from, to *time.Time) (int64, error) {
+	// Verify account belongs to user
+	if _, err := s.repo.GetAccount(ctx, userID, accountID); err != nil {
+		return 0, mapStorageErr(err, "account")
+	}
+
+	count, err := s.repo.DeleteOperationsByAccount(ctx, accountID, from, to)
+	if err != nil {
+		return 0, fmt.Errorf("operations: bulk delete: %w", err)
+	}
+
+	// Recompute balance after bulk delete
+	if err := s.recomputeBalance(ctx, userID, accountID); err != nil {
+		return count, err
+	}
+	return count, nil
 }

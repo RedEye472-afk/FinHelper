@@ -163,9 +163,13 @@ export function ImportPage() {
         // Try backend PDF parser first
         const formData = new FormData()
         formData.append('file', file)
-        const res = await apiRequest<{ text: string; line_count: number }>(
+        const res = await apiRequest<{ text: string; line_count: number; fallback?: boolean }>(
           'POST', '/api/v1/import/parse-pdf', formData, { skipAuth: true }
         )
+        // If backend returned empty text or fallback flag, use client-side pdf.js
+        if (!res.text || res.fallback) {
+          throw new Error('Backend PDF parser unavailable, using client-side fallback')
+        }
         setRawText(res.text)
         setStep('review')
       } catch {
@@ -334,7 +338,29 @@ export function ImportPage() {
 
           {/* Account select */}
           <div className="rounded-[16px] border p-3" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
-            <p className="text-xs font-medium mb-2" style={{ color: '#64748B' }}>Счёт для импорта</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium" style={{ color: '#64748B' }}>Счёт для импорта</p>
+              {accountId && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Удалить ВСЕ операции этого счёта? Это действие необратимо.')) return
+                    try {
+                      await apiRequest('DELETE', `/api/v1/operations/bulk?account_id=${accountId}`)
+                      alert('Операции удалены')
+                      // Reload page to refresh data
+                      window.location.reload()
+                    } catch (e) {
+                      console.error(e)
+                      alert('Ошибка удаления')
+                    }
+                  }}
+                  className="text-xs px-2 py-1 rounded border"
+                  style={{ borderColor: 'rgba(244,63,94,0.3)', color: '#F43F5E' }}
+                >
+                  🗑️ Очистить счёт
+                </button>
+              )}
+            </div>
             <div className="flex gap-2 flex-wrap">
               {accList.map(a => (
                 <button key={a.id} onClick={() => setAccountId(a.id)}

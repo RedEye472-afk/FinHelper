@@ -50,16 +50,20 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 export async function apiRequest<T>(method: string, path: string, body?: unknown, opts?: { skipAuth?: boolean }): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {}
   if (!opts?.skipAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`
 
-  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined })
+  // For FormData, don't set Content-Type - browser will set it with boundary
+  const isFormData = body instanceof FormData
+  if (!isFormData) headers['Content-Type'] = 'application/json'
+
+  const res = await fetch(path, { method, headers, body: isFormData ? body as FormData : body ? JSON.stringify(body) : undefined })
 
   if (res.status === 401 && !opts?.skipAuth) {
     const refreshed = await tryRefresh()
     if (refreshed) {
       headers['Authorization'] = `Bearer ${accessToken}`
-      const retry = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined })
+      const retry = await fetch(path, { method, headers, body: isFormData ? body as FormData : body ? JSON.stringify(body) : undefined })
       if (!retry.ok) { const err = await retry.json().catch(() => ({})); throw new ApiRequestError(retry.status, err.detail || err.title || 'Request failed') }
       return retry.json()
     }

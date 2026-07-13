@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -228,6 +229,59 @@ func (h *OperationsHandler) SetCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// BulkDelete → DELETE /api/v1/operations/bulk?account_id=123&from=2024-01-01&to=2024-12-31.
+// Deletes all operations for the given account (optionally filtered by date range).
+func (h *OperationsHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, ok := MustUserID(ctx)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "auth.unauthorized", "no user in context")
+		return
+	}
+
+	q := r.URL.Query()
+	accountIDStr := q.Get("account_id")
+	if accountIDStr == "" {
+		writeError(w, http.StatusBadRequest, "ops.missing_account_id", "account_id query parameter is required")
+		return
+	}
+	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+	if err != nil || accountID <= 0 {
+		writeError(w, http.StatusBadRequest, "ops.invalid_account_id", "account_id must be a positive integer")
+		return
+	}
+
+	var fromPtr, toPtr *time.Time
+	if v := q.Get("from"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "ops.invalid_from", "from must be YYYY-MM-DD")
+			return
+		}
+		fromPtr = &t
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "ops.invalid_to", "to must be YYYY-MM-DD")
+			return
+		}
+		end := t.Add(24*time.Hour - time.Nanosecond)
+		toPtr = &end
+	}
+
+	deleted, err := h.svc.BulkDeleteByAccount(ctx, userID, accountID, fromPtr, toPtr)
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"deleted": deleted,
+		"message": fmt.Sprintf("Удалено %d операций", deleted),
+	})
 }
 
 // ---- Parsing helpers ----

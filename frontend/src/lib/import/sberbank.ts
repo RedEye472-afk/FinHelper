@@ -19,8 +19,10 @@ export interface ParsedTransaction {
 
 /** Убрать неразрывные пробелы и перевести "1 234,56" → 1234.56 */
 function parseRussianNumber(s: string): number {
-  const cleaned = s.replace(/[\s\xa0]/g, '').replace(',', '.')
-  return parseFloat(cleaned) || 0
+  // Сначала заменяем запятую на точку, потом убираем пробелы (кроме между цифр)
+  // "4 100,00" -> "4 100.00" -> "4100.00" -> 4100
+  const normalized = s.replace(',', '.').replace(/[\s\xa0]/g, '')
+  return parseFloat(normalized) || 0
 }
 
 /** "DD.MM.YYYY" → "YYYY-MM-DD" */
@@ -39,9 +41,26 @@ function isTime(s: string): boolean {
   return /^\d{2}:\d{2}$/.test(s.trim())
 }
 
-/** Проверить что строка похожа на сумму: "186,97" или "+4 000,00" */
+/** Проверить что строка похожа на сумму: "186,97" или "+4 000,00" или "100,00" */
 function isAmount(s: string): boolean {
   return /^[+-]?[\d\s\xa0]+,\d{2}$/.test(s.trim())
+}
+
+/** Проверить что токен является частью суммы (цифра или число с запятой) */
+function isAmountPart(s: string): boolean {
+  return /^[+-]?\d+$/.test(s.trim()) || isAmount(s)
+}
+
+/** Склеить разделённые пробелом части суммы */
+function joinAmountParts(parts: string[], startIdx: number): { amountStr: string; nextIdx: number } {
+  let amountStr = parts[startIdx]
+  let j = startIdx + 1
+  // Собираем части суммы: "4" + "100,00" = "4 100,00"
+  while (j < parts.length && isAmountPart(parts[j])) {
+    amountStr += ' ' + parts[j]
+    j++
+  }
+  return { amountStr, nextIdx: j }
 }
 
 /** Проверить что строка похожа на остаток: "5 613,50" */

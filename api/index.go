@@ -1,9 +1,15 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +21,7 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/config"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/email"
 	applog "github.com/RedEye472-afk/FinHelper/backend/pkg/log"
+	"github.com/RedEye472-afk/FinHelper/backend/pkg/migrate"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/ratelimit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/budget"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/categorization"
@@ -22,7 +29,6 @@ import (
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/dashboard"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/deposit"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/goals"
-	"github.com/RedEye472-afk/FinHelper/backend/pkg/migrate"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/service/operations"
 	"github.com/RedEye472-afk/FinHelper/backend/pkg/storage"
 	transporthttp "github.com/RedEye472-afk/FinHelper/backend/pkg/transport/http"
@@ -40,12 +46,6 @@ func getHandler() http.Handler {
 	return h
 }
 
-// initHandler builds the full API router. DB connection is LAZY:
-// database/sql doesn't connect until the first query, so the λ
-// starts in <1s. Migrations are deferred to POST /api/v1/migrate.
-//
-// This avoids the Vercel Hobby 10s timeout: no blocking ping,
-// no synchronous migration at init.
 func initHandler() http.Handler {
 	cfg, err := config.Load()
 	if err != nil {
@@ -55,8 +55,6 @@ func initHandler() http.Handler {
 
 	logger := applog.New(cfg.Log.Level, cfg.Log.Format)
 
-	// OpenLazy creates a *sql.DB without connecting. First query
-	// triggers the actual TCP+SCRAM handshake.
 	pool, dbErr := storage.OpenLazy(cfg.Database.URL)
 	if dbErr != nil {
 		log.Printf("vercel: pool creation error, degraded mode: %v", dbErr)
@@ -64,10 +62,8 @@ func initHandler() http.Handler {
 	}
 	log.Println("vercel: lazy pool created (no connection yet)")
 
-	// MVP: use existing user id=10 (samoylov-2006@inbox.ru)
 	demoUserID := int64(10)
 
-	// Create a simple auth issuer for demo tokens
 	issuer, err := auth.NewJWTIssuer(
 		cfg.JWT.AccessSecret, cfg.JWT.RefreshSecret,
 		cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL,
@@ -77,7 +73,6 @@ func initHandler() http.Handler {
 		return buildDegradedRouter("jwt issuer error: " + err.Error())
 	}
 
-	// MVP: use demo auth middleware that auto-sets demo user
 	demoAuthMW := transporthttp.NewDemoAuthMiddleware(demoUserID, issuer, logger)
 
 	var mailer *email.Sender
@@ -134,13 +129,11 @@ func initHandler() http.Handler {
 		Credit:         credSvc,
 	}, demoAuthMW)
 
-	// Healthz: always OK (λ is alive, DB connection is lazy)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// Readyz: probe DB with a short-timeout query
 	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		probeCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -154,7 +147,6 @@ func initHandler() http.Handler {
 		w.Write([]byte(`{"status":"ready","db":"connected"}`))
 	})
 
-	// Migrations: trigger manually after deploy
 	r.Post("/api/v1/migrate", func(w http.ResponseWriter, r *http.Request) {
 		migrateCtx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
@@ -169,6 +161,9 @@ func initHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok","msg":"migrations applied"}`))
 	})
+
+	// PDF parsing — pure Go, no external deps
+	r.Post("/api/v1/import/parse-pdf", HandlePDFParse)
 
 	r.Mount("/", apiRouter)
 	log.Println("vercel: handler ready")
@@ -203,7 +198,155 @@ func buildDegradedRouter(reason string) http.Handler {
 	return r
 }
 
-// Handler is the Vercel Serverless Function entry point.
 func Handler(w http.ResponseWriter, r *http.Request) {
 	getHandler().ServeHTTP(w, r)
+}
+
+// ── PDF parsing handler (pure Go, no Python) ────────────────────────────────
+
+func HandlePDFParse(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(nil, r.Body, 50<<20)
+
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "import.invalid_upload",
+			"failed to parse multipart form: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "import.missing_file",
+			"file field is required: "+err.Error())
+		return
+	}
+	defer file.Close()
+
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
+		writeJSONError(w, http.StatusBadRequest, "import.invalid_type",
+			"only PDF files are accepted")
+		return
+	}
+
+	tmpFile, err := os.CreateTemp("", "finhelper-parse-*.pdf")
+	if err != nil {
+		log.Printf("pdf_parse: create temp: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := io.Copy(tmpFile, file); err != nil {
+		tmpFile.Close()
+		log.Printf("pdf_parse: write temp: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	tmpFile.Close()
+
+	text, err := extractPDFText(tmpPath)
+	if err != nil {
+		log.Printf("pdf_parse: extract error: %v", err)
+		// Don't fail — frontend will use pdf.js fallback
+		writeJSON(w, http.StatusOK, map[string]any{
+			"text":       "",
+			"line_count": 0,
+			"fallback":   true,
+		})
+		return
+	}
+
+	lineCount := 0
+	if text != "" {
+		lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+		lineCount = len(lines)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"text":       text,
+		"line_count": lineCount,
+	})
+}
+
+func extractPDFText(pdfPath string) (string, error) {
+	// Try pdftotext (poppler-utils) if available
+	if _, err := exec.LookPath("pdftotext"); err == nil {
+		cmd := exec.Command("pdftotext", "-layout", pdfPath, "-")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err == nil {
+			return stdout.String(), nil
+		}
+		log.Printf("pdftotext failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Try python3 with pdfplumber/PyPDF2 if available
+	if _, err := exec.LookPath("python3"); err == nil {
+		script := `
+import sys
+try:
+    import pdfplumber
+    with pdfplumber.open(sys.argv[1]) as pdf:
+        text = []
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                text.append(t)
+        print("\n\n".join(text))
+except ImportError:
+    try:
+        import PyPDF2
+        with open(sys.argv[1], "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            text = []
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    text.append(t)
+            print("\n\n".join(text))
+    except ImportError:
+        sys.exit(1)
+`
+		tmpScript, err := os.CreateTemp("", "pdf_extract_*.py")
+		if err != nil {
+			return "", err
+		}
+		defer os.Remove(tmpScript.Name())
+		if _, err := tmpScript.WriteString(script); err != nil {
+			return "", err
+		}
+		tmpScript.Close()
+
+		cmd := exec.Command("python3", tmpScript.Name(), pdfPath)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err == nil {
+			return stdout.String(), nil
+		}
+		log.Printf("python pdf extract failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Fallback: return empty, frontend will use pdf.js
+	return "", nil
+}
+
+type problem struct {
+	Type   string `json:"type,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Status int    `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		_, _ = w.Write([]byte(`{"type":"internal","title":"encode_failed"}`))
+	}
+}
+
+func writeJSONError(w http.ResponseWriter, status int, typ, detail string) {
+	writeJSON(w, status, problem{Type: typ, Status: status, Detail: detail})
 }

@@ -332,6 +332,37 @@ func scanOperation(s scanner) (Operation, error) {
 //
 // The query matches the account as either leg of the operation, so a single
 // pass correctly handles transfers. Returns Zero on no rows.
+// DeleteOperationsByAccount deletes all operations for a given account (hard delete).
+// Optionally filters by date range (from <= operation_date <= to).
+// Returns count of deleted rows. Used for full reimport or cleanup.
+func (p *Pool) DeleteOperationsByAccount(ctx context.Context, accountID int64, from, to *time.Time) (int64, error) {
+	q := `DELETE FROM operations WHERE account_id = $1 AND deleted_at IS NULL`
+	args := []any{accountID}
+	argNum := 2
+	if from != nil {
+		q += fmt.Sprintf(" AND operation_date >= $%d", argNum)
+		args = append(args, *from)
+		argNum++
+	}
+	if to != nil {
+		q += fmt.Sprintf(" AND operation_date <= $%d", argNum)
+		args = append(args, *to)
+		argNum++
+	}
+	res, err := p.DB.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, fmt.Errorf("storage: delete operations by account: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("storage: delete operations by account rows affected: %w", err)
+	}
+	return n, nil
+}
+
+// SumByAccountSince returns the recomputed balance for the account: the sum
+// of every non-deleted operation's effect on it. Used by the operations
+// service to keep the cached accounts.balance column self-healing.
 func (p *Pool) SumByAccountSince(ctx context.Context, accountID int64) (domain.Money, error) {
 	const q = `
 		SELECT COALESCE(SUM(leg), 0) FROM (
