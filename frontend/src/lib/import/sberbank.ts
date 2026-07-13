@@ -179,12 +179,22 @@ export function parseSberbankInline(text: string): ParsedTransaction[] {
     const timeStr = dateIdx + 1 < parts.length && isTime(parts[dateIdx + 1]) ? parts[dateIdx + 1] : ''
 
     // Ищем сумму (число вида 186,97) после категории
+    // Сумма может быть разбита пробелом: "4" "100,00" -> нужно склеить
     let amountIdx = -1
     let foundMinus = false
     for (let j = dateIdx + (timeStr ? 2 : 1); j < parts.length; j++) {
       if (parts[j] === '-') { foundMinus = true; continue }
       if (parts[j] === '+') { foundMinus = false; continue }
-      if (isAmount(parts[j])) { amountIdx = j; break }
+      if (isAmount(parts[j])) { 
+        amountIdx = j
+        // Проверяем предыдущий токен — может быть частью суммы (тысячи)
+        if (amountIdx > 0 && isAmountPart(parts[amountIdx - 1])) {
+          const joined = joinAmountParts(parts, amountIdx - 1)
+          parts.splice(amountIdx - 1, 2, joined.amountStr)
+          amountIdx = amountIdx - 1
+        }
+        break 
+      }
     }
     if (amountIdx === -1) continue
 
@@ -197,7 +207,17 @@ export function parseSberbankInline(text: string): ParsedTransaction[] {
 
     // Сумма и остаток
     const amountStr = (foundMinus ? '-' : '') + parts[amountIdx]
-    const balanceStr = amountIdx + 1 < parts.length && !isDate(parts[amountIdx + 1]) ? parts[amountIdx + 1] : ''
+    let balanceStr = ''
+    if (amountIdx + 1 < parts.length && !isDate(parts[amountIdx + 1])) {
+      let balanceIdx = amountIdx + 1
+      // Баланс тоже может быть разделен пробелом: "5 613,50"
+      if (balanceIdx + 1 < parts.length && isAmountPart(parts[balanceIdx + 1])) {
+        const joined = joinAmountParts(parts, balanceIdx)
+        balanceStr = joined.amountStr
+      } else {
+        balanceStr = parts[balanceIdx]
+      }
+    }
 
     // Описание — следующая строка, если она начинается с даты и имеет код
     let description = ''
