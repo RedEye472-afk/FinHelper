@@ -1,6 +1,6 @@
 /**
  * DashboardPage — banking home screen (T-Bank style)
- * Balance → Accounts → Month stats → Recent ops → Quick actions
+ * Balance → Accounts → Month stats → PieChart expenses → Recent ops → Quick actions
  * Premium Dark Neon, real API, no floats.
  */
 import { useMemo } from 'react'
@@ -11,6 +11,7 @@ import {
   Wallet, PiggyBank, CreditCard, Landmark, Target,
   ShoppingBag, Car, Film, ShoppingCart,
 } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { useFinance } from '../store'
 import { useSettings } from '../hooks/useSettings'
 import { useAccounts, useOperations, useGoals } from '../api/queries'
@@ -24,6 +25,54 @@ const cardVariant = {
 
 const accountIcons: Record<string, typeof Wallet> = {
   cash: Wallet, bank: Landmark, savings: PiggyBank, investment: TrendingUp, crypto: CreditCard, debt: CreditCard,
+}
+
+/** Recharts tooltip для PieChart — форматирует сумму через decimal.js */
+function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { category: string; amount: string } }> }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div className="rounded-lg px-3 py-2 text-xs shadow-lg" style={{ background: '#1E293B', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <p className="font-medium" style={{ color: '#E2E8F0' }}>{d.category}</p>
+      <p className="font-mono-money font-bold mt-0.5" style={{ color: '#F43F5E' }}>−{formatCompact(toDecimal(d.amount))}</p>
+    </div>
+  )
+}
+
+/** Ring PieChart расходов по категориям (T-Bank style) */
+function ExpensesChart({ data, hideBalance }: { data: { category: string; amount: string; color: string }[]; hideBalance: boolean }) {
+  if (data.length === 0) return null
+  // Топ-8 категорий, остальное → «Прочее»
+  const top = data.slice(0, 8)
+  const otherTotal = data.slice(8).reduce((s, d) => s.plus(toDecimal(d.amount)), M.zero())
+  if (otherTotal.gt(0)) top.push({ category: 'Прочее', amount: otherTotal.toFixed(2), color: '#64748b' })
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="w-36 h-36 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={top} dataKey="amount" nameKey="category" cx="50%" cy="50%"
+              innerRadius={36} outerRadius={58} paddingAngle={2} strokeWidth={0}>
+              {top.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+            </Pie>
+            <Tooltip content={<PieTooltip />} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex-1 space-y-1.5 min-w-0">
+        {top.map(d => (
+          <div key={d.category} className="flex items-center gap-2 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+            <span className="flex-1 truncate" style={{ color: '#94A3B8' }}>{d.category}</span>
+            <span className="font-mono-money font-medium shrink-0" style={{ color: '#E2E8F0' }}>
+              {hideBalance ? '···' : formatCompact(toDecimal(d.amount))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function DashboardPage() {
@@ -49,6 +98,7 @@ export function DashboardPage() {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
   }).length
   const hasData = kpi.totalBalance.gt(0) || accounts.length > 0
+  const chartData = expensesByCategory.map(e => ({ category: e.category, amount: e.amount.toFixed(2), color: e.color }))
 
   if (isLoading) {
     return (
@@ -166,32 +216,43 @@ export function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* ═══ 3. MONTH STATS ═══ */}
-          <motion.div variants={cardVariant}>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-[16px] border p-3.5 text-center"
-                style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
-                <p className="text-lg font-bold font-mono-money" style={{ color: '#22C55E' }}>
-                  {hideBalance ? '···' : formatCompact(kpi.monthIncome)}
-                </p>
-                <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Доход</p>
-              </div>
-              <div className="rounded-[16px] border p-3.5 text-center"
-                style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
-                <p className="text-lg font-bold font-mono-money" style={{ color: '#F43F5E' }}>
-                  {hideBalance ? '···' : formatCompact(totalSpent)}
-                </p>
-                <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Расход</p>
-              </div>
-              <div className="rounded-[16px] border p-3.5 text-center"
-                style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
-                <p className="text-lg font-bold font-mono-money" style={{ color: '#A78BFA' }}>
-                  {monthTxCount}
-                </p>
-                <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Операций</p>
-              </div>
-            </div>
-          </motion.div>
+              {/* ═══ 3. MONTH STATS ═══ */}
+              <motion.div variants={cardVariant}>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-[16px] border p-3.5 text-center"
+                    style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
+                    <p className="text-lg font-bold font-mono-money" style={{ color: '#22C55E' }}>
+                      {hideBalance ? '···' : formatCompact(kpi.monthIncome)}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Доход</p>
+                  </div>
+                  <div className="rounded-[16px] border p-3.5 text-center"
+                    style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
+                    <p className="text-lg font-bold font-mono-money" style={{ color: '#F43F5E' }}>
+                      {hideBalance ? '···' : formatCompact(totalSpent)}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Расход</p>
+                  </div>
+                  <div className="rounded-[16px] border p-3.5 text-center"
+                    style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
+                    <p className="text-lg font-bold font-mono-money" style={{ color: '#A78BFA' }}>
+                      {monthTxCount}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>Операций</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* ═══ 3.5. EXPENSES PIE CHART ═══ */}
+              {chartData.length > 0 && (
+                <motion.div variants={cardVariant}>
+                  <div className="rounded-[20px] border p-4"
+                    style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'var(--bg-card)' }}>
+                    <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Расходы по категориям</p>
+                    <ExpensesChart data={chartData} hideBalance={hideBalance} />
+                  </div>
+                </motion.div>
+              )}
 
           {/* ═══ 4. RECENT OPERATIONS ═══ */}
           <motion.div variants={cardVariant}>

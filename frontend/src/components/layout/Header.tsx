@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bell } from 'lucide-react'
+import { ArrowLeft, Bell, WifiOff } from 'lucide-react'
 import { useSettings } from '../../hooks/useSettings'
+import { useDemoMode } from '../../api/queries'
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Обзор', '/operations': 'Операции', '/budgets': 'Бюджеты',
@@ -13,6 +14,7 @@ export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const { initials } = useSettings()
+  const demo = useDemoMode()
   const path = location.pathname
   const title = pageTitles[path] || 'FinHelper'
   const isMain = path === '/dashboard'
@@ -41,6 +43,15 @@ export function Header() {
           >
             {title}
           </h1>
+          {demo && (
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+              style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}
+            >
+              <WifiOff size={10} />
+              Демо
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

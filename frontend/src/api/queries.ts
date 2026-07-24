@@ -1,6 +1,12 @@
 /**
  * queries.ts — React Query hooks for FinHelper.
  * All requests go through API client (client.ts). Money values are strings.
+ *
+ * Demo-fallback: когда бэкенд недоступен (холодный старт λ, таймаут БД — см.
+ * PROGRESS.md), хуки GET-запросов возвращают реалистичные демо-данные в тех же
+ * типах. Флаг `isDemo` (ниже) позволяет UI показать индикатор «демо-режим».
+ * Мутации (create/delete) НЕ фолбэкачатся — пишут в реальный API; в демо-режиме
+ * они упадут с понятной ошибкой, что ожидаемо и не ломает презентацию.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as accountsApi from './accounts'
@@ -10,17 +16,42 @@ import * as budgetsApi from './budgets'
 import * as goalsApi from './goalsApi'
 import * as categoriesApi from './categories'
 import * as calculatorsApi from './calculators'
+import * as demo from './demoData'
 import type {
   Account, AccountCreate, Operation, OperationCreate, ListResponse,
   DashboardData, Budget, BudgetCreate, BudgetStatus,
   Category, Goal, GoalCreate, GoalProjection,
 } from '../types'
 
+/**
+ * Сетевой статус приложения. true, если последний GET упал и мы ушли в демо-данные.
+ * Читается UI через useDemoMode() для показа индикатора «демо-режим».
+ */
+let _demoMode = false
+const _demoSubs = new Set<() => void>()
+function _notifyDemoSubs() { _demoSubs.forEach(cb => cb()) }
+function _setDemoMode(v: boolean) { if (_demoMode !== v) { _demoMode = v; _notifyDemoSubs() } }
+export function isDemoMode(): boolean { return _demoMode }
+
+/** Обёртка: при ошибке реального API отдаёт демо-данные и выставляет isDemoMode. */
+async function withDemo<T>(real: () => Promise<T>, demoFn: () => T): Promise<T> {
+  try {
+    const data = await real()
+    _setDemoMode(false)
+    return data
+  } catch (e) {
+    _setDemoMode(true)
+    // 152-ФЗ: в лог пишем только сетевую причину, без PII.
+    console.warn('[FinHelper] API недоступен — переключение в демо-режим')
+    return demoFn()
+  }
+}
+
 // ── Accounts ──
 export function useAccounts() {
   return useQuery({
     queryKey: ['accounts'],
-    queryFn: () => accountsApi.listAccounts(),
+    queryFn: () => withDemo(() => accountsApi.listAccounts(), () => demo.demoAccounts()),
   })
 }
 
@@ -44,7 +75,10 @@ export function useDeleteAccount() {
 export function useOperations(limit = 50, before?: number) {
   return useQuery({
     queryKey: ['operations', limit, before],
-    queryFn: () => operationsApi.listOperations(limit, before),
+    queryFn: () => withDemo(
+      () => operationsApi.listOperations(limit, before),
+      () => demo.demoOperationsList(limit, before),
+    ),
   })
 }
 
@@ -74,7 +108,10 @@ export function useDeleteOperation() {
 export function useDashboard(period = 'month') {
   return useQuery({
     queryKey: ['dashboard', period],
-    queryFn: () => dashboardApi.getDashboard(period),
+    queryFn: () => withDemo(
+      () => dashboardApi.getDashboard(period),
+      () => demo.demoDashboard(period),
+    ),
   })
 }
 
@@ -82,7 +119,7 @@ export function useDashboard(period = 'month') {
 export function useBudgets() {
   return useQuery({
     queryKey: ['budgets'],
-    queryFn: () => budgetsApi.listBudgets(),
+    queryFn: () => withDemo(() => budgetsApi.listBudgets(), () => demo.demoBudgets()),
   })
 }
 
@@ -114,7 +151,7 @@ export function useBudgetStatus(id: number) {
 export function useCategories() {
   return useQuery({
     queryKey: ['categories'],
-    queryFn: () => categoriesApi.listCategories(),
+    queryFn: () => withDemo(() => categoriesApi.listCategories(), () => demo.demoCategories()),
   })
 }
 
@@ -122,7 +159,7 @@ export function useCategories() {
 export function useGoals() {
   return useQuery({
     queryKey: ['goals'],
-    queryFn: () => goalsApi.listGoals(),
+    queryFn: () => withDemo(() => goalsApi.listGoals(), () => demo.demoGoals()),
   })
 }
 
@@ -146,7 +183,10 @@ export function useContributeGoal() {
 export function useGoalProjection(goalId: number, enabled = false) {
   return useQuery({
     queryKey: ['goalProjection', goalId],
-    queryFn: () => goalsApi.getProjection(goalId),
+    queryFn: () => withDemo(
+      () => goalsApi.getProjection(goalId),
+      () => demo.demoProjection(goalId),
+    ),
     enabled: goalId > 0 && enabled,
   })
 }
@@ -168,4 +208,18 @@ export function useAffordabilityCalc() {
   return useMutation({
     mutationFn: calculatorsApi.calculateAffordability,
   })
+}
+
+// ── Demo-mode indicator (reactive) ──
+// useSyncExternalStore: перерисовывает UI, когда withDemo переключает режим.
+import { useSyncExternalStore } from 'react'
+
+function subscribeDemo(cb: () => void) {
+  _demoSubs.add(cb)
+  return () => { _demoSubs.delete(cb) }
+}
+
+/** React-хук: true, если приложение показывает демо-данные (бэк недоступен). */
+export function useDemoMode(): boolean {
+  return useSyncExternalStore(subscribeDemo, () => _demoMode, () => false)
 }
